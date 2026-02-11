@@ -1,0 +1,35 @@
+{
+  "name": "sofia-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SOFIA – Plataforma consultorio juridico universitario",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "dev:identidad": "pnpm --filter ms-identidad-acceso run dev",
+    "dev:gateway": "pnpm --filter api-gateway-bff run dev",
+    "dev:core": "pnpm run dev:identidad & pnpm run dev:gateway",
+    "lint": "pnpm -r run lint",
+    "test": "pnpm -r run test",
+    "db:generate": "pnpm --filter @sofia/prisma run generate",
+    "db:migrate": "pnpm --filter @sofia/prisma run migrate:dev",
+    "db:migrate:deploy": "pnpm --filter @sofia/prisma run migrate:deploy",
+    "db:seed": "pnpm --filter @sofia/prisma run seed",
+    "db:studio": "pnpm --filter @sofia/prisma run studio",
+    "docker:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "clean": "pnpm -r exec -- rm -rf dist node_modules"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "bcrypt",
+      "esbuild"
+    ]
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

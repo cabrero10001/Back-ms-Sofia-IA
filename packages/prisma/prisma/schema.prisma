@@ -1,0 +1,304 @@
+// ─────────────────────────────────────────────────────
+// SOFIA – Schema centralizado (BD única PostgreSQL)
+// ─────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+  // previewFeatures = ["postgresqlExtensions"]  // Re-enable when pgvector is installed
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // extensions = [pgvector(map: "vector", schema: "public")]  // Re-enable when pgvector is installed
+}
+
+// ═══════════════════════════════════════════════════════
+//  ENUMS
+// ═══════════════════════════════════════════════════════
+
+enum Rol {
+  ADMIN_CONSULTORIO
+  ESTUDIANTE
+  USUARIO
+}
+
+enum EstadoUsuario {
+  ACTIVO
+  INACTIVO
+  SUSPENDIDO
+}
+
+enum EstadoCaso {
+  ABIERTO
+  EN_PROGRESO
+  CERRADO
+  DERIVADO
+}
+
+enum AreaDerecho {
+  CIVIL
+  PENAL
+  LABORAL
+  FAMILIA
+  ADMINISTRATIVO
+  CONSTITUCIONAL
+  COMERCIAL
+  OTRO
+}
+
+enum EstadoCita {
+  PROGRAMADA
+  CONFIRMADA
+  EN_CURSO
+  COMPLETADA
+  CANCELADA
+  NO_ASISTIO
+}
+
+enum EstadoSesionChat {
+  ACTIVA
+  CERRADA
+  EXPIRADA
+}
+
+enum DireccionMensaje {
+  ENTRANTE
+  SALIENTE
+}
+
+enum RolMensaje {
+  USUARIO
+  ASISTENTE
+  SISTEMA
+}
+
+enum TipoConsentimiento {
+  TRATAMIENTO_DATOS
+  TERMINOS_SERVICIO
+  POLITICA_PRIVACIDAD
+}
+
+// ═══════════════════════════════════════════════════════
+//  IDENTIDAD Y ACCESO
+// ═══════════════════════════════════════════════════════
+
+model Usuario {
+  id             String        @id @default(uuid())
+  nombreCompleto String        @map("nombre_completo")
+  correo         String        @unique
+  telefono       String?       @unique
+  passwordHash   String?       @map("password_hash")
+  rol            Rol           @default(USUARIO)
+  estado         EstadoUsuario @default(ACTIVO)
+  creadoEn       DateTime      @default(now()) @map("creado_en")
+  actualizadoEn  DateTime      @updatedAt @map("actualizado_en")
+
+  estudiante      Estudiante?
+  casosCreados    Caso[]           @relation("CasoCreador")
+  sesionesChat    SesionChat[]
+  consentimientos Consentimiento[]
+
+  @@map("usuarios")
+}
+
+// ═══════════════════════════════════════════════════════
+//  ESTUDIANTES
+// ═══════════════════════════════════════════════════════
+
+model Estudiante {
+  id                String   @id @default(uuid())
+  usuarioId         String   @unique @map("usuario_id")
+  codigo            String?
+  programa          String
+  semestre          Int?
+  activoConsultorio Boolean  @default(false) @map("activo_consultorio")
+  creadoEn          DateTime @default(now()) @map("creado_en")
+  actualizadoEn     DateTime @updatedAt @map("actualizado_en")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("estudiantes")
+}
+
+// ═══════════════════════════════════════════════════════
+//  CASOS
+// ═══════════════════════════════════════════════════════
+
+model Caso {
+  id                 String       @id @default(uuid())
+  creadoPorUsuarioId String?      @map("creado_por_usuario_id")
+  telefonoContacto   String?      @map("telefono_contacto")
+  estado             EstadoCaso   @default(ABIERTO)
+  areaDerecho        AreaDerecho? @map("area_derecho")
+  descripcion        String?
+  esCompetencia      Boolean?     @map("es_competencia")
+  razonCompetencia   String?      @map("razon_competencia")
+  creadoEn           DateTime     @default(now()) @map("creado_en")
+  actualizadoEn      DateTime     @updatedAt @map("actualizado_en")
+
+  creadoPor    Usuario?     @relation("CasoCreador", fields: [creadoPorUsuarioId], references: [id])
+  citas        Cita[]
+  sesionesChat SesionChat[]
+
+  @@map("casos")
+}
+
+// ═══════════════════════════════════════════════════════
+//  CITAS / AGENDA
+// ═══════════════════════════════════════════════════════
+
+model Cita {
+  id            String     @id @default(uuid())
+  casoId        String     @map("caso_id")
+  fechaHora     DateTime   @map("fecha_hora")
+  estado        EstadoCita @default(PROGRAMADA)
+  notas         String?
+  creadoEn      DateTime   @default(now()) @map("creado_en")
+  actualizadoEn DateTime   @updatedAt @map("actualizado_en")
+
+  caso Caso @relation(fields: [casoId], references: [id], onDelete: Cascade)
+
+  @@map("citas")
+}
+
+// ═══════════════════════════════════════════════════════
+//  CHAT (WhatsApp)
+// ═══════════════════════════════════════════════════════
+
+model SesionChat {
+  id            String           @id @default(uuid())
+  usuarioId     String?          @map("usuario_id")
+  telefono      String
+  estado        EstadoSesionChat @default(ACTIVA)
+  casoId        String?          @map("caso_id")
+  contexto      Json             @default("{}")
+  metadata      Json             @default("{}")
+  iniciadaEn    DateTime         @default(now()) @map("iniciada_en")
+  cerradaEn     DateTime?        @map("cerrada_en")
+
+  usuario  Usuario?      @relation(fields: [usuarioId], references: [id])
+  caso     Caso?         @relation(fields: [casoId], references: [id])
+  mensajes MensajeChat[]
+
+  @@index([telefono, estado])
+  @@map("sesiones_chat")
+}
+
+model MensajeChat {
+  id            String           @id @default(uuid())
+  sesionId      String           @map("sesion_id")
+  direccion     DireccionMensaje
+  rol           RolMensaje
+  texto         String?
+  payload       Json             @default("{}")
+  creadoEn      DateTime         @default(now()) @map("creado_en")
+  consultaRagId String?          @map("consulta_rag_id")
+
+  sesion      SesionChat   @relation(fields: [sesionId], references: [id], onDelete: Cascade)
+  consultaRag ConsultaRag? @relation(fields: [consultaRagId], references: [id])
+
+  @@index([sesionId, creadoEn])
+  @@map("mensajes_chat")
+}
+
+// ═══════════════════════════════════════════════════════
+//  RAG / IA  (tablas preparadas – endpoints en fase 2)
+// ═══════════════════════════════════════════════════════
+
+model Documento {
+  id            String   @id @default(uuid())
+  titulo        String
+  contenido     String?
+  fuenteUrl     String?  @map("fuente_url")
+  tipo          String?
+  metadata      Json     @default("{}")
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  fragmentos Fragmento[]
+
+  @@map("documentos")
+}
+
+model Fragmento {
+  id          String                       @id @default(uuid())
+  documentoId String                       @map("documento_id")
+  contenido   String
+  // embedding   Unsupported("vector(1536)")?  // Re-enable when pgvector is installed
+  embeddingJson String?                      @map("embedding_json") // Temporary: store as JSON string until pgvector
+  posicion      Int                          @default(0)
+  metadata    Json                         @default("{}")
+  creadoEn    DateTime                     @default(now()) @map("creado_en")
+
+  documento  Documento     @relation(fields: [documentoId], references: [id], onDelete: Cascade)
+  resultados ResultadoRag[]
+
+  @@index([documentoId])
+  @@map("fragmentos")
+}
+
+model ConsultaRag {
+  id            String                       @id @default(uuid())
+  sesionChatId  String?                      @map("sesion_chat_id")
+  textoConsulta String  @map("texto_consulta")
+  // embedding     Unsupported("vector(1536)")?  // Re-enable when pgvector is installed
+  embeddingJson String? @map("embedding_json") // Temporary: store as JSON string until pgvector
+  metadata      Json    @default("{}")
+  creadoEn      DateTime                     @default(now()) @map("creado_en")
+
+  resultados   ResultadoRag[]
+  evaluaciones EvaluacionRag[]
+  mensajes     MensajeChat[]
+
+  @@map("consultas_rag")
+}
+
+model ResultadoRag {
+  id            String   @id @default(uuid())
+  consultaId    String   @map("consulta_id")
+  fragmentoId   String   @map("fragmento_id")
+  scoreOriginal Float    @map("score_original")
+  scoreReranker Float?   @map("score_reranker")
+  posicionFinal Int?     @map("posicion_final")
+  creadoEn      DateTime @default(now()) @map("creado_en")
+
+  consulta  ConsultaRag @relation(fields: [consultaId], references: [id], onDelete: Cascade)
+  fragmento Fragmento   @relation(fields: [fragmentoId], references: [id], onDelete: Cascade)
+
+  @@map("resultados_rag")
+}
+
+model EvaluacionRag {
+  id         String   @id @default(uuid())
+  consultaId String   @map("consulta_id")
+  relevancia Float?
+  precision  Float?
+  feedback   String?
+  metadata   Json     @default("{}")
+  creadoEn   DateTime @default(now()) @map("creado_en")
+
+  consulta ConsultaRag @relation(fields: [consultaId], references: [id], onDelete: Cascade)
+
+  @@map("evaluaciones_rag")
+}
+
+// ═══════════════════════════════════════════════════════
+//  CONSENTIMIENTOS
+// ═══════════════════════════════════════════════════════
+
+model Consentimiento {
+  id               String             @id @default(uuid())
+  usuarioId        String?            @map("usuario_id")
+  telefono         String?
+  tipo             TipoConsentimiento
+  versionPolitica  String             @map("version_politica")
+  aceptadoEn       DateTime           @default(now()) @map("aceptado_en")
+  ip               String?
+  userAgent        String?            @map("user_agent")
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@index([telefono, tipo])
+  @@map("consentimientos")
+}

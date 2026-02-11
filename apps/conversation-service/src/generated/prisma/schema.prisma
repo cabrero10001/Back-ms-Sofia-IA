@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Channel {
+  WHATSAPP
+  WEBCHAT
+}
+
+enum ConversationStatus {
+  OPEN
+  WAITING_INPUT
+  HANDOFF
+  CLOSED
+}
+
+enum Direction {
+  IN
+  OUT
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  DOCUMENT
+  INTERACTIVE
+  SYSTEM
+}
+
+model Contact {
+  id            String         @id @default(uuid())
+  tenantId      String
+  channel       Channel
+  externalId    String
+  displayName   String?
+  phone         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  conversations Conversation[]
+  messages      Message[]
+
+  @@unique([tenantId, channel, externalId])
+  @@index([tenantId, channel])
+}
+
+model Conversation {
+  id                   String                @id @default(uuid())
+  tenantId             String
+  contactId            String
+  channel              Channel
+  status               ConversationStatus    @default(OPEN)
+  lastMessageAt        DateTime              @default(now())
+  currentFlowVersionId String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  contact              Contact               @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  messages             Message[]
+  contexts             ConversationContext[]
+
+  @@index([tenantId, contactId, status])
+  @@index([tenantId, lastMessageAt])
+}
+
+model Message {
+  id                String       @id @default(uuid())
+  tenantId          String
+  conversationId    String
+  contactId         String
+  direction         Direction
+  type              MessageType
+  text              String?
+  payload           Json
+  providerMessageId String?
+  createdAt         DateTime     @default(now())
+  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  contact           Contact      @relation(fields: [contactId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, conversationId, createdAt])
+  @@index([tenantId, providerMessageId])
+}
+
+model ConversationContext {
+  id             String       @id @default(uuid())
+  tenantId       String
+  conversationId String
+  version        Int
+  data           Json
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, conversationId, version])
+  @@index([tenantId, conversationId])
+}

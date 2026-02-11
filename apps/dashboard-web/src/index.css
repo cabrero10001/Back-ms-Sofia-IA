@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+/* ─── Custom theme ─────────────────────────────────── */
+@theme {
+  --color-primary: #1e40af;
+  --color-primary-light: #3b82f6;
+  --color-primary-dark: #1e3a8a;
+  --color-accent: #f59e0b;
+  --color-success: #10b981;
+  --color-danger: #ef4444;
+  --color-warning: #f59e0b;
+}
+
+body {
+  @apply bg-gray-50 text-gray-900 antialiased;
+}

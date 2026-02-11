@@ -1,0 +1,36 @@
+# deps
+node_modules/
+__pycache__/
+.venv/
+*.pyc
+
+# build
+dist/
+build/
+*.tsbuildinfo
+
+# env
+.env
+*.env.local
+
+# ide
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# os
+.DS_Store
+Thumbs.db
+
+# prisma
+packages/prisma/prisma/migrations/**/migration_lock.toml
+
+# logs
+*.log
+
+# coverage
+coverage/
+
+# misc
+nul

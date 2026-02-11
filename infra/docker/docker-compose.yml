@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: sofia-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: sofia_user
+      POSTGRES_PASSWORD: sofia_pass_dev
+      POSTGRES_DB: sofia_db
+    volumes:
+      - sofia_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sofia_user -d sofia_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  sofia_pgdata:
