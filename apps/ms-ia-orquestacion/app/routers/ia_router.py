@@ -1,21 +1,32 @@
 import logging
-from fastapi import APIRouter, Request
-from app.schemas.ia_schemas import IaRespondRequest, IaRespondResponse
-from app.services.ia_service import ia_service
+
+from fastapi import APIRouter, HTTPException, Request
+
+from app.schemas.ia_schemas import ClassifyExtractRequest, ClassifyExtractResponse
+from app.services.ia_service import get_ia_service
 
 logger = logging.getLogger("ms-ia-orquestacion")
 router = APIRouter()
 
 
-@router.post("/respond", response_model=IaRespondResponse)
-async def respond(body: IaRespondRequest, request: Request):
-    """
-    Recibe texto del usuario y devuelve respuesta.
-    Fase 1: mock con detección de intención por keywords.
-    Fase 2: RAG + reranker + LLM.
-    """
+@router.post("/classify-extract", response_model=ClassifyExtractResponse, response_model_exclude_none=True)
+def classify_extract(body: ClassifyExtractRequest, request: Request) -> ClassifyExtractResponse:
     request_id = getattr(request.state, "request_id", "unknown")
-    logger.info(f"[{request_id}] /ia/respond telefono={body.telefono} sesion={body.sesionId}")
+    logger.info("[%s] classify_extract received", request_id)
 
-    result = await ia_service.respond(body)
-    return result
+    try:
+        service = get_ia_service()
+        result = service.classify_extract(body.text)
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("[%s] classify_extract_unhandled_error", request_id)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "INTERNAL_ERROR",
+                "message": "Error interno del servidor",
+                "details": str(exc),
+            },
+        ) from exc

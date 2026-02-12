@@ -605,6 +605,46 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  apps/orchestrator-service:
+    dependencies:
+      '@sofia/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@sofia/http-client':
+        specifier: workspace:*
+        version: link:../../packages/http-client
+      '@sofia/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
+      '@sofia/shared-kernel':
+        specifier: workspace:*
+        version: link:../../packages/shared-kernel
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.6
+      express:
+        specifier: ^4.21.0
+        version: 4.22.1
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@types/cors':
+        specifier: ^2.8.19
+        version: 2.8.19
+      '@types/express':
+        specifier: ^5.0.0
+        version: 5.0.6
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.11
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/config:
     dependencies:
       dotenv:
