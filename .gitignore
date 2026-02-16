@@ -29,6 +29,9 @@ packages/prisma/prisma/migrations/**/migration_lock.toml
 # logs
 *.log
 
+# whatsapp adapter sessions
+apps/whatsapp-adapter-service/.sessions/
+
 # coverage
 coverage/
 
