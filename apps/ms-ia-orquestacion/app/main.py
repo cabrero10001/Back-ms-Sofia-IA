@@ -1,6 +1,7 @@
 import logging
 import os
 import uuid
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -13,8 +14,6 @@ ENV_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", ".env"))
 
 load_dotenv(dotenv_path=ENV_PATH)
 
-print("OPENAI_API_KEY cargada:", bool(os.getenv("OPENAI_API_KEY")))
-
 from app.routers import ia_router, rag_router
 
 logging.basicConfig(
@@ -22,6 +21,18 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 logger = logging.getLogger("ms-ia-orquestacion")
+
+
+def _safe_mongo_target(uri: str) -> str:
+    if not uri:
+        return "not-configured"
+    try:
+        parsed = urlparse(uri)
+        host = parsed.netloc.split("@")[-1] if parsed.netloc else "unknown-host"
+        db_name = os.getenv("MONGODB_DB", "sofia")
+        return f"{host}/{db_name}"
+    except Exception:
+        return "unknown-host"
 
 app = FastAPI(
     title="SOFIA - MS IA Orquestacion",
@@ -55,7 +66,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "error": {
                 "code": "VALIDATION_ERROR",
                 "message": "Payload inválido",
-                "details": exc.errors(),
+                "detail": exc.errors(),
             }
         },
     )
@@ -79,9 +90,23 @@ async def generic_exception_handler(request: Request, exc: Exception):
             "error": {
                 "code": "INTERNAL_ERROR",
                 "message": "Error interno del servidor",
-                "details": str(exc),
+                "detail": str(exc),
             }
         },
+    )
+
+
+@app.on_event("startup")
+def startup_debug_summary() -> None:
+    logger.info(
+        "startup_config openai_key=%s openai_model=%s rag_topk=%s rerank_enabled=%s rerank_top_k=%s temperature=%s mongo=%s",
+        bool(os.getenv("OPENAI_API_KEY")),
+        os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
+        os.getenv("RAG_TOPK", "20"),
+        os.getenv("RAG_RERANK_ENABLED", "true"),
+        os.getenv("RAG_RERANK_TOP_K", os.getenv("RAG_RERANK_K", "5")),
+        os.getenv("RAG_OPENAI_TEMPERATURE", os.getenv("RAG_TEMPERATURE", "0.3")),
+        _safe_mongo_target(os.getenv("MONGODB_URI", "")),
     )
 
 

@@ -8,13 +8,21 @@ Pipeline:
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
+import httpx
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from openai import OpenAI
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure, PyMongoError
+
+try:
+    import certifi
+except Exception:  # pragma: no cover
+    certifi = None
 
 logger = logging.getLogger("ms-ia-orquestacion")
 
@@ -34,9 +42,22 @@ RAG_EMBED_MODEL = os.getenv("RAG_EMBED_MODEL", "text-embedding-3-small")
 RAG_EMBED_DIM = int(os.getenv("RAG_EMBED_DIM", "1064"))
 RAG_CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", "255"))
 RAG_CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "50"))
-RAG_TOPK = int(os.getenv("RAG_TOPK", "5"))
-RAG_RERANK_K = int(os.getenv("RAG_RERANK_K", "5"))
-RAG_TEMPERATURE = float(os.getenv("RAG_TEMPERATURE", "0.3"))
+RAG_TOPK = int(os.getenv("RAG_TOPK", "20"))
+RAG_RERANK_TOP_K = int(os.getenv("RAG_RERANK_TOP_K", os.getenv("RAG_RERANK_K", "5")))
+RAG_RERANK_ENABLED = os.getenv("RAG_RERANK_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+RAG_OPENAI_TEMPERATURE = float(os.getenv("RAG_OPENAI_TEMPERATURE", os.getenv("RAG_TEMPERATURE", "0.3")))
+RAG_OPENAI_TIMEOUT_S = float(os.getenv("RAG_OPENAI_TIMEOUT_S", "30"))
+RAG_OPENAI_CONNECT_TIMEOUT_S = float(os.getenv("RAG_OPENAI_CONNECT_TIMEOUT_S", "5"))
+RAG_OPENAI_READ_TIMEOUT_S = float(os.getenv("RAG_OPENAI_READ_TIMEOUT_S", "25"))
+RAG_OPENAI_WRITE_TIMEOUT_S = float(os.getenv("RAG_OPENAI_WRITE_TIMEOUT_S", "25"))
+RAG_OPENAI_POOL_TIMEOUT_S = float(os.getenv("RAG_OPENAI_POOL_TIMEOUT_S", "5"))
+RAG_OPENAI_MAX_RETRIES = int(os.getenv("RAG_OPENAI_MAX_RETRIES", "2"))
+
+MONGO_SERVER_SELECTION_TIMEOUT_MS = int(os.getenv("MONGO_SERVER_SELECTION_TIMEOUT_MS", "5000"))
+MONGO_SOCKET_TIMEOUT_MS = int(os.getenv("MONGO_SOCKET_TIMEOUT_MS", "20000"))
+MONGO_CONNECT_TIMEOUT_MS = int(os.getenv("MONGO_CONNECT_TIMEOUT_MS", "5000"))
+MONGO_TLS_CA_FILE = os.getenv("MONGO_TLS_CA_FILE", "")
+MONGO_TLS_ALLOW_INVALID_CERTS = os.getenv("MONGO_TLS_ALLOW_INVALID_CERTS", "false").lower() in {"1", "true", "yes", "on"}
 
 # ---------------------------------------------------------------------------
 # Flashrank (reranker local) – carga opcional, fallback a OpenAI rerank
@@ -85,6 +106,16 @@ def ensure_index_notes() -> str:
     return instructions
 
 
+def _safe_mongo_target(uri: str) -> str:
+    """Retorna host/db sanitizado para logs (sin credenciales)."""
+    try:
+        parsed = urlparse(uri)
+        host = parsed.netloc.split("@")[-1] if parsed.netloc else "unknown-host"
+    except Exception:
+        host = "unknown-host"
+    return f"{host}/{MONGODB_DB}"
+
+
 # ===========================================================================
 # RAGService
 # ===========================================================================
@@ -99,12 +130,38 @@ class RAGService:
         if not MONGODB_URI:
             raise ValueError("MONGODB_URI no configurada. El servicio RAG requiere MongoDB.")
 
-        self._openai = OpenAI(api_key=OPENAI_API_KEY)
+        timeout = httpx.Timeout(
+            timeout=RAG_OPENAI_TIMEOUT_S,
+            connect=RAG_OPENAI_CONNECT_TIMEOUT_S,
+            read=RAG_OPENAI_READ_TIMEOUT_S,
+            write=RAG_OPENAI_WRITE_TIMEOUT_S,
+            pool=RAG_OPENAI_POOL_TIMEOUT_S,
+        )
+        self._openai = OpenAI(
+            api_key=OPENAI_API_KEY,
+            max_retries=RAG_OPENAI_MAX_RETRIES,
+            timeout=timeout,
+        )
 
         # ── MongoDB ──
-        self._mongo_client = MongoClient(MONGODB_URI)
+        mongo_kwargs: dict[str, Any] = {
+            "serverSelectionTimeoutMS": MONGO_SERVER_SELECTION_TIMEOUT_MS,
+            "socketTimeoutMS": MONGO_SOCKET_TIMEOUT_MS,
+            "connectTimeoutMS": MONGO_CONNECT_TIMEOUT_MS,
+        }
+        if MONGO_TLS_ALLOW_INVALID_CERTS:
+            mongo_kwargs["tlsAllowInvalidCertificates"] = True
+        elif MONGO_TLS_CA_FILE:
+            mongo_kwargs["tlsCAFile"] = MONGO_TLS_CA_FILE
+        elif certifi is not None:
+            mongo_kwargs["tlsCAFile"] = certifi.where()
+
+        self._mongo_client = MongoClient(MONGODB_URI, **mongo_kwargs)
         self._db = self._mongo_client[MONGODB_DB]
         self._collection = self._db[MONGODB_COLLECTION]
+
+        # Fuerza handshake temprano para fallar rapido si hay problema de red/DNS/auth
+        self._mongo_client.admin.command("ping")
 
         # ── Text splitter (LangChain) ──
         self._splitter = RecursiveCharacterTextSplitter(
@@ -116,8 +173,17 @@ class RAGService:
 
         ensure_index_notes()
         logger.info(
-            "RAGService inicializado (embed_model=%s, dims=%d, chunk=%d, topk=%d, rerank_k=%d)",
-            RAG_EMBED_MODEL, RAG_EMBED_DIM, RAG_CHUNK_SIZE, RAG_TOPK, RAG_RERANK_K,
+            "RAGService inicializado (mongo=%s, mongo_tls_ca=%s, insecure_tls=%s, embed_model=%s, dims=%d, chunk=%d, topk=%d, rerank_enabled=%s, rerank_top_k=%d, openai_timeout_s=%.1f)",
+            _safe_mongo_target(MONGODB_URI),
+            "set" if (MONGO_TLS_CA_FILE or certifi is not None) else "not-set",
+            MONGO_TLS_ALLOW_INVALID_CERTS,
+            RAG_EMBED_MODEL,
+            RAG_EMBED_DIM,
+            RAG_CHUNK_SIZE,
+            RAG_TOPK,
+            RAG_RERANK_ENABLED,
+            RAG_RERANK_TOP_K,
+            RAG_OPENAI_TIMEOUT_S,
         )
 
     # ─── Embeddings ───────────────────────────────────────────────────────
@@ -209,6 +275,7 @@ class RAGService:
         Retorna hasta `topk` resultados con score.
         """
         topk = topk or RAG_TOPK
+        retrieve_started = time.perf_counter()
         query_embedding = self._embed_query(query)
 
         pipeline = [
@@ -236,7 +303,8 @@ class RAGService:
 
         try:
             results = list(self._collection.aggregate(pipeline))
-            logger.info("RAG retrieve: %d candidatos obtenidos para topk=%d", len(results), topk)
+            retrieve_ms = round((time.perf_counter() - retrieve_started) * 1000, 2)
+            logger.info("RAG retrieve: %d candidatos obtenidos para topk=%d (%.2f ms)", len(results), topk, retrieve_ms)
             return results
         except OperationFailure as exc:
             error_msg = str(exc)
@@ -260,7 +328,11 @@ class RAGService:
         if not candidates:
             return []
 
-        k = RAG_RERANK_K
+        k = RAG_RERANK_TOP_K
+
+        if not RAG_RERANK_ENABLED:
+            logger.info("RAG rerank: deshabilitado por RAG_RERANK_ENABLED=false")
+            return candidates[:k]
 
         # Opcion B: flashrank si esta disponible
         if _flashrank_available and _ranker is not None:
@@ -363,10 +435,18 @@ class RAGService:
 
         Retorna { answer, citations, usedChunks }.
         """
+        total_started = time.perf_counter()
+        logger.info("RAG marker=start")
+
         # 1) Retrieve
+        retrieve_started = time.perf_counter()
         candidates = self._retrieve(query, topk=RAG_TOPK)
+        retrieve_ms = round((time.perf_counter() - retrieve_started) * 1000, 2)
+        logger.info("RAG marker=after-retrieve candidates=%d duration_ms=%.2f", len(candidates), retrieve_ms)
 
         if not candidates:
+            total_ms = round((time.perf_counter() - total_started) * 1000, 2)
+            logger.info("RAG marker=end duration_ms=%.2f result=no_context", total_ms)
             return {
                 "answer": "No tengo esa informacion en los documentos.",
                 "citations": [],
@@ -374,7 +454,10 @@ class RAGService:
             }
 
         # 2) Rerank
+        rerank_started = time.perf_counter()
         top_chunks = self._rerank(query, candidates)
+        rerank_ms = round((time.perf_counter() - rerank_started) * 1000, 2)
+        logger.info("RAG marker=after-rerank top_chunks=%d duration_ms=%.2f", len(top_chunks), rerank_ms)
 
         # 3) Construir contexto con source y chunkIndex
         context_parts: list[str] = []
@@ -413,17 +496,24 @@ class RAGService:
             "Responde basandote unicamente en el contexto anterior."
         )
 
+        logger.info("RAG marker=before-openai")
+        openai_started = time.perf_counter()
         completion = self._openai.chat.completions.create(
             model=OPENAI_MODEL,
-            temperature=RAG_TEMPERATURE,
+            temperature=RAG_OPENAI_TEMPERATURE,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
         )
+        openai_ms = round((time.perf_counter() - openai_started) * 1000, 2)
+        logger.info("RAG marker=after-openai duration_ms=%.2f", openai_ms)
 
         answer = completion.choices[0].message.content or ""
         logger.info("RAG answer: respuesta generada (%d chars), %d citations", len(answer), len(citations))
+
+        total_ms = round((time.perf_counter() - total_started) * 1000, 2)
+        logger.info("RAG marker=end duration_ms=%.2f", total_ms)
 
         return {
             "answer": answer,

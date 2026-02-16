@@ -93,8 +93,33 @@ function pickEntityAge(ai: AIResult): number | undefined {
   return typeof age === 'number' && age > 0 && age <= 120 ? age : undefined;
 }
 
+function isHardResetCommand(text: string): boolean {
+  return [
+    'reset',
+    'reiniciar',
+    'menu',
+    'menú',
+    'inicio',
+    'empezar',
+    'comenzar',
+  ].includes(text);
+}
+
+function isGreeting(text: string): boolean {
+  return [
+    'hola',
+    'holi',
+    'buenas',
+    'hello',
+    'hi',
+  ].includes(text);
+}
+
 function decideNextAction(text: string, context: OrchestratorContext, ai: AIResult): Decision {
-  if (ai.shouldReset === true) {
+  const shouldForceReset = isHardResetCommand(text)
+    || (isGreeting(text) && context.step === 'ready_for_handoff');
+
+  if (ai.shouldReset === true || shouldForceReset) {
     return {
       patch: { intent: 'general', step: 'ask_intent', profile: {} },
       responseText: 'Listo 👋 ¿En qué te puedo ayudar? Responde: laboral o soporte.',

@@ -8,7 +8,6 @@ import {
   EVENTS,
   MemoryDB,
 } from '@builderbot/bot';
-import { BaileysProvider } from '@builderbot/provider-baileys';
 import { z } from 'zod';
 
 config();
@@ -76,9 +75,7 @@ function sanitizePhoneNumber(phoneNumber: string): string {
 }
 
 function isVendorAuthenticated(vendor: any): boolean {
-  const hasUser = Boolean(vendor?.user);
-  const isRegistered = Boolean(vendor?.authState?.creds?.registered);
-  return hasUser || isRegistered;
+  return Boolean(vendor?.user);
 }
 
 function extractErrorMessage(error: unknown): string {
@@ -119,6 +116,52 @@ function hasRecentPairingCode(): boolean {
   const issuedAtMs = new Date(lastPairingAt).getTime();
   if (Number.isNaN(issuedAtMs)) return false;
   return Date.now() - issuedAtMs <= PAIRING_CODE_CACHE_MS;
+}
+
+function extractPairingCodeFromRequireAction(payload: unknown): string | null {
+  const data = payload as {
+    payload?: { code?: unknown };
+    instructions?: unknown;
+  };
+
+  const directCode = data?.payload?.code;
+  if (typeof directCode === 'string' && directCode.trim().length > 0) {
+    return directCode.trim();
+  }
+
+  if (Array.isArray(data?.instructions)) {
+    const line = data.instructions.find((item) => typeof item === 'string' && item.toLowerCase().includes('pairing code'));
+    if (typeof line === 'string') {
+      const match = line.match(/([0-9A-Z-]{4,})/i);
+      if (match?.[1]) return match[1].trim();
+    }
+  }
+
+  return null;
+}
+
+function loadBaileysRuntime(): { BaileysProvider: any; baileys: any } {
+  const baileysModule = require('baileys');
+  let baileysRuntime = baileysModule;
+
+  if (typeof baileysModule !== 'function' && typeof baileysModule?.default === 'function') {
+    const compatBaileys = Object.assign(
+      (...args: unknown[]) => baileysModule.default(...args),
+      baileysModule,
+      { default: baileysModule.default }
+    );
+
+    const moduleId = require.resolve('baileys');
+    if (require.cache[moduleId]) {
+      require.cache[moduleId].exports = compatBaileys;
+    }
+
+    baileysRuntime = compatBaileys;
+    log('warn', 'baileys_cjs_esm_interop_patch_applied');
+  }
+
+  const { BaileysProvider } = require('@builderbot/provider-baileys');
+  return { BaileysProvider, baileys: baileysRuntime };
 }
 
 function cleanupProcessedIds(now = Date.now()): void {
@@ -209,11 +252,31 @@ async function callOrchestrator(input: {
 
 async function bootstrap(): Promise<void> {
   const sanitizedPhoneNumber = sanitizePhoneNumber(env.PHONE_NUMBER);
+  const { BaileysProvider, baileys } = loadBaileysRuntime();
+
+  let latestWaVersion: number[] | null = null;
+  if (typeof baileys?.fetchLatestBaileysVersion === 'function') {
+    try {
+      const latest = await baileys.fetchLatestBaileysVersion();
+      if (Array.isArray(latest?.version) && latest.version.length >= 3) {
+        const parsedVersion = latest.version.map((value: unknown) => Number(value)).slice(0, 3);
+        latestWaVersion = parsedVersion;
+        log('info', 'baileys_latest_version_loaded', { version: parsedVersion.join('.') });
+      }
+    } catch (error) {
+      log('warn', 'baileys_latest_version_load_failed', {
+        error: extractErrorMessage(error),
+      });
+    }
+  }
 
   const adapterProvider = createProvider(BaileysProvider as any, {
-    usePairingCode: env.BAILEYS_USE_PAIRING_CODE,
+    // Keep provider-side pairing disabled to avoid its internal premature
+    // requestPairingCode call, and handle pairing from this service.
+    usePairingCode: false,
     phoneNumber: sanitizedPhoneNumber,
     sessionPath: env.BAILEYS_SESSION_PATH,
+    ...(latestWaVersion ? { version: latestWaVersion } : {}),
   });
 
   const ensurePairingCode = async (reason: string): Promise<string | null> => {
@@ -224,16 +287,25 @@ async function bootstrap(): Promise<void> {
 
     const vendor = currentVendor ?? (adapterProvider as any)?.vendor;
     if (!vendor) {
-      lastPairingError = 'Socket Baileys aun no disponible.';
+      const waitUntil = Date.now() + 12_000;
+      while (!(currentVendor ?? (adapterProvider as any)?.vendor) && Date.now() < waitUntil) {
+        await sleep(400);
+        if (lastPairingCode) return lastPairingCode;
+      }
+    }
+
+    const vendorReady = currentVendor ?? (adapterProvider as any)?.vendor;
+    if (!vendorReady) {
+      lastPairingError = 'Socket Baileys aun no disponible. Reintenta en unos segundos.';
       return null;
     }
 
-    if (typeof vendor.requestPairingCode !== 'function') {
+    if (typeof vendorReady.requestPairingCode !== 'function') {
       lastPairingError = 'La version actual del provider no soporta requestPairingCode.';
       return null;
     }
 
-    if (isVendorAuthenticated(vendor)) {
+    if (isVendorAuthenticated(vendorReady)) {
       lastPairingCode = null;
       lastPairingError = null;
       return null;
@@ -242,7 +314,7 @@ async function bootstrap(): Promise<void> {
     pairingRequestInFlight = true;
 
     try {
-      const pairingCode = await vendor.requestPairingCode(sanitizedPhoneNumber);
+      const pairingCode = await vendorReady.requestPairingCode(sanitizedPhoneNumber);
       lastPairingCode = String(pairingCode ?? '').trim() || null;
       lastPairingAt = new Date().toISOString();
 
@@ -295,6 +367,33 @@ async function bootstrap(): Promise<void> {
   };
 
   const setupPairingTracking = (): void => {
+    (adapterProvider as any).on?.('require_action', (payload: unknown) => {
+      const pairingCode = extractPairingCodeFromRequireAction(payload);
+      if (!pairingCode) return;
+
+      lastPairingCode = pairingCode;
+      lastPairingAt = new Date().toISOString();
+      lastPairingError = null;
+      logPairingCode(pairingCode);
+      log('info', 'pairing_code_received_from_provider_event', { pairingAt: lastPairingAt });
+    });
+
+    (adapterProvider as any).on?.('auth_failure', (payload: unknown) => {
+      const message = Array.isArray(payload)
+        ? payload.filter((item) => typeof item === 'string').join(' | ')
+        : extractErrorMessage(payload);
+      lastPairingError = message || 'auth_failure';
+      log('error', 'baileys_auth_failure', { error: lastPairingError });
+    });
+
+    (adapterProvider as any).on?.('ready', (ready: unknown) => {
+      if (ready === true) {
+        isWhatsAppReady = true;
+        lastPairingCode = null;
+        lastPairingError = null;
+      }
+    });
+
     const probe = setInterval(() => {
       const vendor = (adapterProvider as any)?.vendor;
       if (!vendor) return;
@@ -339,7 +438,6 @@ async function bootstrap(): Promise<void> {
 
           if (connection === 'close') {
             isWhatsAppReady = false;
-            await ensurePairingCode('connection_close');
             return;
           }
 
@@ -405,11 +503,15 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  await createBot({
+  const bot = await createBot({
     flow: createFlow([welcomeFlow]),
     provider: adapterProvider,
     database: new MemoryDB(),
   });
+
+  // BuilderBot only initializes Baileys vendor when httpServer() is called.
+  // Use port 0 to avoid conflicting with our control API on env.PORT.
+  bot.httpServer(0);
 
   setupPairingTracking();
 
