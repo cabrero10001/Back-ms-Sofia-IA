@@ -1,53 +1,137 @@
 """
 Router para endpoints RAG (Retrieval Augmented Generation).
-Fase actual: stubs que retornan datos de ejemplo.
-Fase siguiente: integración con pgvector + embeddings + reranker.
+Endpoints bajo /v1/ai: rag-ingest, rag-answer.
 """
-import uuid
-from fastapi import APIRouter
+import logging
+
+from fastapi import APIRouter, HTTPException, Request
+from pymongo.errors import PyMongoError
+
 from app.schemas.rag_schemas import (
-    RagIngestRequest, RagIngestResponse, RagIngestResult,
-    RagRetrieveRequest, RagRetrieveResponse, RagFragmento,
-    RagRerankRequest, RagRerankResponse,
+    RagAnswerRequest,
+    RagAnswerResponse,
+    RagIngestRequest,
+    RagIngestResponse,
 )
+from app.services.rag_service import get_rag_service
+
+logger = logging.getLogger("ms-ia-orquestacion")
 
 router = APIRouter()
 
 
-@router.post("/ingest", response_model=RagIngestResponse)
-async def ingest(body: RagIngestRequest):
-    """
-    Stub: ingesta un documento al pipeline RAG.
-    Fase 2: chunking + embedding + inserción en pgvector.
-    """
-    doc_id = str(uuid.uuid4())
-    # Simulación: se "crearon" fragmentos proporcionales al largo del contenido
-    num_fragmentos = max(1, len(body.contenido) // 500)
+# ---------------------------------------------------------------------------
+# Helpers para mapear excepciones a HTTP
+# ---------------------------------------------------------------------------
 
-    return RagIngestResponse(
-        data=RagIngestResult(
-            documento_id=doc_id,
-            fragmentos_creados=num_fragmentos,
-            message=f"Stub: documento '{body.titulo}' registrado con {num_fragmentos} fragmento(s). Implementar embedding real en Fase 2.",
+def _is_openai_error(exc: Exception) -> bool:
+    """Detecta si una excepcion proviene del SDK de OpenAI."""
+    module = getattr(type(exc), "__module__", "")
+    return "openai" in module.lower()
+
+
+# ---------------------------------------------------------------------------
+# POST /rag-ingest
+# ---------------------------------------------------------------------------
+
+@router.post("/rag-ingest", response_model=RagIngestResponse)
+async def rag_ingest(body: RagIngestRequest, request: Request) -> RagIngestResponse:
+    """
+    Ingesta un documento al pipeline RAG.
+    Si ya existe el source, elimina chunks previos y reinserta (upsert por source).
+    """
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.info("[%s] rag_ingest source='%s'", request_id, body.source)
+
+    try:
+        service = get_rag_service()
+        result = service.ingest(
+            source=body.source,
+            text=body.text,
+            title=body.title,
+            metadata=body.metadata,
         )
-    )
+        return RagIngestResponse(**result)
+
+    except ValueError as exc:
+        logger.error("[%s] rag_ingest config_error: %s", request_id, exc)
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "CONFIG_ERROR", "message": str(exc)},
+        ) from exc
+
+    except PyMongoError as exc:
+        logger.error("[%s] rag_ingest mongo_error: %s", request_id, exc)
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "MONGO_ERROR", "message": f"Error de MongoDB: {exc}"},
+        ) from exc
+
+    except Exception as exc:
+        logger.exception("[%s] rag_ingest unhandled_error", request_id)
+        if _is_openai_error(exc):
+            raise HTTPException(
+                status_code=502,
+                detail={"code": "OPENAI_ERROR", "message": "Error al comunicarse con OpenAI", "details": str(exc)},
+            ) from exc
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "INTERNAL_ERROR", "message": "Error interno del servidor", "details": str(exc)},
+        ) from exc
 
 
-@router.post("/retrieve", response_model=RagRetrieveResponse)
-async def retrieve(body: RagRetrieveRequest):
-    """
-    Stub: busca fragmentos relevantes dado un query.
-    Fase 2: embedding del query + búsqueda coseno en pgvector.
-    """
-    # Retorna lista vacía — no hay documentos indexados aún
-    return RagRetrieveResponse(data=[])
+# ---------------------------------------------------------------------------
+# POST /rag-answer
+# ---------------------------------------------------------------------------
 
+@router.post("/rag-answer", response_model=RagAnswerResponse)
+async def rag_answer(body: RagAnswerRequest, request: Request) -> RagAnswerResponse:
+    """
+    Pipeline RAG completo: retrieve(topK=5) -> rerank(k=5) -> generate answer.
+    """
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.info("[%s] rag_answer query='%s'", request_id, body.query[:80])
 
-@router.post("/rerank", response_model=RagRerankResponse)
-async def rerank(body: RagRerankRequest):
-    """
-    Stub: re-rankea fragmentos usando un modelo de cross-encoding.
-    Fase 2: integrar con cross-encoder (Cohere, sentence-transformers, etc).
-    """
-    # Pasamanos: devuelve los mismos fragmentos truncados a top_k
-    return RagRerankResponse(data=body.fragmentos[: body.top_k])
+    try:
+        service = get_rag_service()
+        result = service.rag_answer(query=body.query, filters=body.filters)
+        return RagAnswerResponse(**result)
+
+    except ValueError as exc:
+        logger.error("[%s] rag_answer config_error: %s", request_id, exc)
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "CONFIG_ERROR", "message": str(exc)},
+        ) from exc
+
+    except RuntimeError as exc:
+        error_msg = str(exc)
+        logger.error("[%s] rag_answer runtime_error: %s", request_id, error_msg)
+        if "indice" in error_msg.lower() or "index" in error_msg.lower():
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INDEX_ERROR", "message": error_msg},
+            ) from exc
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "MONGO_ERROR", "message": error_msg},
+        ) from exc
+
+    except PyMongoError as exc:
+        logger.error("[%s] rag_answer mongo_error: %s", request_id, exc)
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "MONGO_ERROR", "message": f"Error de MongoDB: {exc}"},
+        ) from exc
+
+    except Exception as exc:
+        logger.exception("[%s] rag_answer unhandled_error", request_id)
+        if _is_openai_error(exc):
+            raise HTTPException(
+                status_code=502,
+                detail={"code": "OPENAI_ERROR", "message": "Error al comunicarse con OpenAI", "details": str(exc)},
+            ) from exc
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "INTERNAL_ERROR", "message": "Error interno del servidor", "details": str(exc)},
+        ) from exc

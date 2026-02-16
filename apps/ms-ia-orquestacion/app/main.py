@@ -15,7 +15,7 @@ load_dotenv(dotenv_path=ENV_PATH)
 
 print("OPENAI_API_KEY cargada:", bool(os.getenv("OPENAI_API_KEY")))
 
-from app.routers import ia_router
+from app.routers import ia_router, rag_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -95,3 +95,4 @@ def health():
 
 
 app.include_router(ia_router.router, prefix="/v1/ai", tags=["IA"])
+app.include_router(rag_router.router, prefix="/v1/ai", tags=["RAG"])
