@@ -1,7 +1,7 @@
 """
 Schemas Pydantic para los endpoints RAG (rag-ingest + rag-answer).
 """
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -75,3 +75,7 @@ class RagAnswerResponse(BaseModel):
     answer: str
     citations: list[RagCitation]
     usedChunks: list[RagUsedChunk]
+    confidenceScore: float = 0.0
+    bestScore: Optional[float] = None
+    status: Literal["ok", "low_confidence", "no_context"] = "no_context"
+    correlationId: Optional[str] = None

@@ -6,7 +6,9 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "test": "tsx src/scripts/verify-flow.ts"
+    "test": "tsx src/scripts/verify-flow.ts",
+    "verify:input": "tsx src/scripts/verify-input.ts",
+    "verify:runtime": "powershell -ExecutionPolicy Bypass -File src/scripts/verify-runtime.ps1"
   },
   "dependencies": {
     "@sofia/config": "workspace:*",

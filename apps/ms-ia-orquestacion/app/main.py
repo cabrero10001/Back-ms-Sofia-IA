@@ -70,6 +70,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
                 "code": "VALIDATION_ERROR",
                 "message": "Payload inválido",
                 "detail": exc.errors(),
+                "details": exc.errors(),
             }
         },
     )
@@ -94,6 +95,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
                 "code": "INTERNAL_ERROR",
                 "message": "Error interno del servidor",
                 "detail": str(exc),
+                "details": str(exc),
             }
         },
     )

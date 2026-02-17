@@ -59,29 +59,39 @@ function normalizeText(text?: string): string {
   return (text ?? '').trim().toLowerCase();
 }
 
-function extractText(input: unknown): string {
-  const payload = input as {
+function pickString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function extractRawText(input: unknown): string {
+  const data = input as {
     text?: unknown;
-    message?: {
-      message?: unknown;
-      text?: unknown;
-      body?: unknown;
-    };
+    message?: unknown;
   };
 
-  const pick = (
-    typeof payload?.text === 'string' && payload.text.trim().length > 0
-      ? payload.text
-      : typeof payload?.message?.message === 'string' && payload.message.message.trim().length > 0
-        ? payload.message.message
-        : typeof payload?.message?.text === 'string' && payload.message.text.trim().length > 0
-          ? payload.message.text
-          : typeof payload?.message?.body === 'string' && payload.message.body.trim().length > 0
-            ? payload.message.body
-            : ''
-  );
+  const asObj = typeof data?.message === 'object' && data.message !== null
+    ? (data.message as { message?: unknown; text?: unknown; body?: unknown })
+    : undefined;
 
-  return pick.trim().toLowerCase();
+  const fromNestedTextObject = typeof asObj?.text === 'object' && asObj.text !== null
+    ? pickString((asObj.text as { body?: unknown }).body)
+    : undefined;
+
+  const extracted = pickString(data?.text)
+    ?? (typeof data?.message === 'string' ? pickString(data.message) : undefined)
+    ?? pickString(asObj?.message)
+    ?? pickString(asObj?.text)
+    ?? pickString(asObj?.body)
+    ?? fromNestedTextObject
+    ?? '';
+
+  return extracted;
+}
+
+function extractText(input: unknown): string {
+  return normalizeText(extractRawText(input));
 }
 
 function parseAge(text: string): number | undefined {
@@ -140,16 +150,18 @@ type StatefulFlowResult = {
 };
 
 async function resolveLaboralQuery(input: {
-  rawText: string;
+  queryText: string;
   correlationId: string;
   tenantId: string;
   conversationId: string;
-}): Promise<{ responseText: string; payload: Record<string, unknown> }> {
-  const query = input.rawText.trim();
+}): Promise<{ responseText: string; payload: Record<string, unknown>; noSupport: boolean; queryUsed: string }> {
+  const query = input.queryText.trim();
   if (!query) {
     return {
       responseText: 'Escribe tu consulta laboral para ayudarte mejor.',
       payload: { rag: { status: 'empty_query' }, correlationId: input.correlationId },
+      noSupport: true,
+      queryUsed: query,
     };
   }
 
@@ -185,6 +197,8 @@ async function resolveLaboralQuery(input: {
           noSupport: isNoSupport,
         },
       },
+      noSupport: isNoSupport,
+      queryUsed: query,
     };
   } catch (error) {
     log.warn(
@@ -210,6 +224,8 @@ async function resolveLaboralQuery(input: {
           error: error instanceof Error ? error.message : String(error),
         },
       },
+      noSupport: true,
+      queryUsed: query,
     };
   }
 }
@@ -270,18 +286,47 @@ async function runStatefulFlow(input: {
       };
     }
 
+    const profile = (state.profile ?? {}) as Record<string, unknown>;
+    const previousQuery = typeof profile.lastLaboralQuery === 'string' ? profile.lastLaboralQuery : '';
+    const previousNoSupport = profile.lastRagNoSupport === true;
+    const currentText = input.rawText.trim();
+    const queryText = previousNoSupport && previousQuery
+      ? `${previousQuery}\n\nDetalles adicionales del usuario: ${currentText}`
+      : currentText;
+
     const rag = await resolveLaboralQuery({
-      rawText: input.rawText,
+      queryText,
       correlationId: input.correlationId,
       tenantId: input.messageIn.tenantId,
       conversationId: input.conversationId,
     });
 
-    conversationStore.set(key, { stage: 'awaiting_question', category: 'laboral', profile: state.profile ?? {} });
+    conversationStore.set(key, {
+      stage: 'awaiting_question',
+      category: 'laboral',
+      profile: {
+        ...profile,
+        lastLaboralQuery: rag.queryUsed,
+        lastRagNoSupport: rag.noSupport,
+      },
+    });
     return {
       responseText: rag.responseText,
-      patch: { intent: 'consulta_laboral', step: 'ask_issue', profile: state.profile ?? {} },
-      payload: { orchestrator: true, flow: 'stateful', ...rag.payload },
+      patch: {
+        intent: 'consulta_laboral',
+        step: 'ask_issue',
+        profile: {
+          ...profile,
+          lastLaboralQuery: rag.queryUsed,
+          lastRagNoSupport: rag.noSupport,
+        },
+      },
+      payload: {
+        orchestrator: true,
+        flow: 'stateful',
+        ...rag.payload,
+        ragContextAugmented: previousNoSupport && Boolean(previousQuery),
+      },
     };
   }
 
@@ -513,8 +558,13 @@ function shouldUseRag(intent: Intent, text: string): boolean {
 }
 
 function isRagNoSupport(result: RagAnswerResult): boolean {
+  if (result.status === 'low_confidence' || result.status === 'no_context') return true;
+
   const answer = result.answer.trim().toLowerCase();
   if (answer.includes('no encontre suficiente soporte')) return true;
+  if (answer.includes('no tengo suficiente informacion en el documento')) return true;
+  if (answer.includes('no tengo suficiente información en el documento')) return true;
+  if (answer.includes('no encontré suficiente soporte')) return true;
   return result.citations.length === 0 && result.usedChunks.length === 0;
 }
 
@@ -544,6 +594,7 @@ export const orchestratorService = {
     const correlationId = requestId ?? randomUUID();
     const channel = mapChannel(messageIn.channel);
     const incomingType = mapMessageType(messageIn.message.type);
+    const extractedRawText = extractRawText(messageIn);
     const extractedText = extractText(messageIn);
 
     const contact = await conversationClient.upsertContact({
@@ -567,8 +618,12 @@ export const orchestratorService = {
       contactId: contact.id,
       direction: 'IN',
       type: incomingType,
-      text: extractedText,
-      payload: messageIn.message.payload,
+      text: extractedRawText,
+      payload: {
+        ...(messageIn.message.payload ?? {}),
+        extractedText,
+        extractedRawText,
+      },
       providerMessageId: messageIn.message.providerMessageId,
       requestId: correlationId,
     });
@@ -591,7 +646,7 @@ export const orchestratorService = {
       const statefulResult = await runStatefulFlow({
         messageIn,
         text: extractedText,
-        rawText: extractedText,
+        rawText: extractedRawText,
         conversationId: conversation.id,
         correlationId,
       });
@@ -602,7 +657,7 @@ export const orchestratorService = {
       nextStep = typeof patch.step === 'string' ? (patch.step as Step) : 'ask_intent';
     } else {
       try {
-        ai = await classifyExtract(extractedText);
+        ai = await classifyExtract(extractedRawText);
       } catch (error) {
         log.warn(
           {
@@ -624,9 +679,9 @@ export const orchestratorService = {
       nextStep = decision.nextStep;
 
       const intentForRag = normalizeIntent(decision.nextIntent);
-      if (shouldUseRag(intentForRag, extractedText)) {
+      if (shouldUseRag(intentForRag, extractedRawText)) {
         const ragStartedAt = Date.now();
-        const query = extractedText.trim();
+        const query = extractedRawText.trim();
 
         try {
           const ragResult = await askRag(query, correlationId);
@@ -695,6 +750,7 @@ export const orchestratorService = {
         stepAfter: nextStep,
         intentAfter: nextIntent,
         extractedText,
+        extractedRawText,
         category: (responsePayload.category as string | undefined)
           ?? (nextIntent === 'consulta_laboral' ? 'laboral' : nextIntent === 'soporte' ? 'soporte' : null),
         flowMode: env.ORCH_FLOW_MODE,
@@ -711,6 +767,23 @@ export const orchestratorService = {
     });
 
     const responses: MessageOut[] = [{ type: 'text', text: responseText, payload: responsePayload }];
+
+    responsePayload = {
+      ...responsePayload,
+      debug: {
+        correlationId,
+        extractedText,
+        extractedRawText,
+        category: responsePayload.category ?? null,
+        stepBefore: context.step ?? null,
+        intentBefore: context.intent ?? null,
+        stepAfter: nextStep,
+        intentAfter: nextIntent,
+        flowMode: env.ORCH_FLOW_MODE,
+      },
+    };
+
+    responses[0].payload = responsePayload;
 
     await conversationClient.createMessage({
       tenantId: messageIn.tenantId,

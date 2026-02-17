@@ -17,6 +17,12 @@ from app.rag.retriever import ChunkCandidate, retrieve_candidates
 logger = get_logger("ms-ia-orquestacion.rag.pipeline")
 
 NO_SUPPORT_MESSAGE = "No encontre suficiente soporte en el documento para responder con seguridad."
+NO_INFO_MESSAGE = "No tengo suficiente informacion en el documento"
+
+
+def _is_no_info_answer(answer: str) -> bool:
+    normalized = " ".join((answer or "").strip().lower().split())
+    return normalized.rstrip(".") == NO_INFO_MESSAGE.lower()
 
 
 @dataclass(frozen=True)
@@ -302,13 +308,15 @@ class RetrievalPipelineService:
         logger.info("rag_pipeline generate answer_len=%d duration_ms=%.2f total_ms=%.2f", len(answer), generation_ms, total_ms)
 
         if not answer:
-            answer = "No tengo suficiente informacion en el documento"
+            answer = NO_INFO_MESSAGE
+
+        answerable = not _is_no_info_answer(answer)
 
         response = self._build_output(top_chunks, answer)
         return {
             "response": response,
             "metrics": {
-                "answerable": True,
+                "answerable": answerable,
                 "thresholdTriggered": False,
                 "top1Score": best_score,
                 "top5Scores": top_scores,

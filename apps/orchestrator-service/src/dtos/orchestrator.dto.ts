@@ -8,13 +8,29 @@ export const MessageInSchema = z.object({
   channel: MessageChannelSchema,
   externalUserId: z.string().min(1),
   displayName: z.string().min(1).optional(),
-  message: z.object({
-    type: MessageTypeSchema,
-    text: z.string().min(1).optional(),
-    payload: z.record(z.any()).optional(),
-    providerMessageId: z.string().min(1).optional(),
-    timestamp: z.string().datetime().optional(),
-  }),
+  text: z.string().min(1).optional(),
+  message: z.preprocess(
+    (value) => {
+      if (typeof value === 'string') {
+        return { type: 'text', message: value };
+      }
+      return value;
+    },
+    z.object({
+      type: MessageTypeSchema,
+      text: z.union([
+        z.string().min(1),
+        z.object({
+          body: z.string().min(1),
+        }),
+      ]).optional(),
+      message: z.string().min(1).optional(),
+      body: z.string().min(1).optional(),
+      payload: z.record(z.any()).optional(),
+      providerMessageId: z.string().min(1).optional(),
+      timestamp: z.string().datetime().optional(),
+    }),
+  ),
 });
 
 export const MessageOutSchema = z.object({

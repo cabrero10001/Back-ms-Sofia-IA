@@ -20,14 +20,28 @@ from app.services.rag_service import get_runtime_env_summary
 
 logger = logging.getLogger("ms-ia-orquestacion")
 REQUEST_TIMEOUT_SECONDS = 60
+NO_INFO_ANSWER = "No tengo suficiente informacion en el documento"
 
 router = APIRouter()
+
+
+def _clamp_01(value: float) -> float:
+    if value < 0.0:
+        return 0.0
+    if value > 1.0:
+        return 1.0
+    return value
 
 
 def _is_debug_enabled() -> bool:
     node_env = os.getenv("NODE_ENV", "development").lower()
     force_debug = os.getenv("RAG_DEBUG_ENDPOINTS", "").lower() in {"1", "true", "yes", "on"}
     return force_debug or node_env != "production"
+
+
+def _is_no_info_answer(answer: str | None) -> bool:
+    normalized = " ".join((answer or "").strip().lower().split())
+    return normalized.rstrip(".") == NO_INFO_ANSWER.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +174,7 @@ async def rag_answer(body: RagAnswerRequest, request: Request) -> RagAnswerRespo
     threshold = os.getenv("RAG_SCORE_THRESHOLD", "0.6")
 
     logger.info(
-        "[rag-answer] corr=%s query=\"%s\" source=\"%s\" tenant=\"%s\" top_k=%s threshold=%s",
+        "[rag-answer] corr=%s queryFinal=\"%s\" source=\"%s\" tenant=\"%s\" top_k=%s threshold=%s",
         correlation_id,
         resolved_query[:80],
         source_applied if source_applied is not None else "",
@@ -171,11 +185,59 @@ async def rag_answer(body: RagAnswerRequest, request: Request) -> RagAnswerRespo
 
     try:
         service = get_rag_service()
-        result = await asyncio.wait_for(
-            asyncio.to_thread(service.rag_answer, query=resolved_query, filters=(request_filters or None)),
+        evaluation = await asyncio.wait_for(
+            asyncio.to_thread(service.rag_evaluate, query=resolved_query, filters=(request_filters or None), dry_run=False),
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
-        return RagAnswerResponse(**result)
+        response_payload = dict(evaluation.get("response", {}))
+        metrics = dict(evaluation.get("metrics", {}))
+        config = dict(metrics.get("config", {}))
+
+        best_score_raw = metrics.get("top1Score")
+        best_score = float(best_score_raw) if isinstance(best_score_raw, (int, float)) else None
+        threshold_raw = config.get("threshold", threshold)
+        threshold_value = float(threshold_raw) if isinstance(threshold_raw, (int, float, str)) else 0.6
+
+        answer_text = str(response_payload.get("answer") or "")
+        answerable = metrics.get("answerable")
+        if not isinstance(answerable, bool):
+            answerable = not _is_no_info_answer(answer_text)
+
+        if best_score is None:
+            status = "no_context"
+            confidence = 0.0
+        elif not answerable:
+            status = "low_confidence"
+            confidence = min(_clamp_01(best_score), 0.49)
+        elif best_score < threshold_value or bool(metrics.get("thresholdTriggered")):
+            status = "low_confidence"
+            confidence = _clamp_01(best_score)
+        else:
+            status = "ok"
+            confidence = _clamp_01(best_score)
+
+        top_k_log = config.get("candidateTopK", top_k)
+        final_k_log = config.get("finalK", os.getenv("RAG_FINAL_K", "5"))
+        logger.info(
+            "[rag-answer] corr=%s status=%s bestScore=%s confidence=%.4f threshold=%s top_k=%s final_k=%s",
+            correlation_id,
+            status,
+            best_score,
+            confidence,
+            threshold_value,
+            top_k_log,
+            final_k_log,
+        )
+
+        response_payload.update(
+            {
+                "confidenceScore": confidence,
+                "bestScore": best_score,
+                "status": status,
+                "correlationId": str(correlation_id),
+            }
+        )
+        return RagAnswerResponse(**response_payload)
 
     except TimeoutError as exc:
         logger.error("[%s] rag_answer timeout_after_%ss", request_id, REQUEST_TIMEOUT_SECONDS)

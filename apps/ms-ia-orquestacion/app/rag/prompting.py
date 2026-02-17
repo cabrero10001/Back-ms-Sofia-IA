@@ -16,6 +16,8 @@ def build_grounded_prompt(query: str, top_chunks: list[ChunkCandidate]) -> tuple
     system_prompt = (
         "Eres un asistente juridico. Responde exclusivamente con evidencia del contexto. "
         "No inventes datos ni cites informacion fuera de los fragmentos. "
+        "Solo responde con 'No tengo suficiente informacion en el documento' cuando ningun fragmento aporte evidencia util para la pregunta. "
+        "Si hay evidencia parcial, responde con lo que si esta respaldado y aclara brevemente el limite. "
         "Si no hay evidencia suficiente responde exactamente: 'No tengo suficiente informacion en el documento'. "
         "Siempre escribe en espanol claro."
     )

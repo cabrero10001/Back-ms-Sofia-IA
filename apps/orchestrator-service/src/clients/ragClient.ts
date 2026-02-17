@@ -16,6 +16,9 @@ export interface RagAnswerResult {
   answer: string;
   citations: RagCitation[];
   usedChunks: RagUsedChunk[];
+  status?: 'ok' | 'low_confidence' | 'no_context';
+  confidenceScore?: number;
+  bestScore?: number | null;
   statusCode: number;
   latencyMs: number;
 }
@@ -34,12 +37,29 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function parsePayload(raw: unknown): { answer: string; citations: RagCitation[]; usedChunks: RagUsedChunk[] } {
+function parsePayload(raw: unknown): {
+  answer: string;
+  citations: RagCitation[];
+  usedChunks: RagUsedChunk[];
+  status?: 'ok' | 'low_confidence' | 'no_context';
+  confidenceScore?: number;
+  bestScore?: number | null;
+} {
   const parsed = raw as {
-    data?: { answer?: string; citations?: RagCitation[]; usedChunks?: RagUsedChunk[] };
+    data?: {
+      answer?: string;
+      citations?: RagCitation[];
+      usedChunks?: RagUsedChunk[];
+      status?: 'ok' | 'low_confidence' | 'no_context';
+      confidenceScore?: number;
+      bestScore?: number | null;
+    };
     answer?: string;
     citations?: RagCitation[];
     usedChunks?: RagUsedChunk[];
+    status?: 'ok' | 'low_confidence' | 'no_context';
+    confidenceScore?: number;
+    bestScore?: number | null;
   };
 
   const payload = parsed.data ?? parsed;
@@ -47,6 +67,9 @@ function parsePayload(raw: unknown): { answer: string; citations: RagCitation[];
     answer: String(payload.answer ?? '').trim(),
     citations: Array.isArray(payload.citations) ? payload.citations : [],
     usedChunks: Array.isArray(payload.usedChunks) ? payload.usedChunks : [],
+    status: payload.status,
+    confidenceScore: typeof payload.confidenceScore === 'number' ? payload.confidenceScore : undefined,
+    bestScore: typeof payload.bestScore === 'number' || payload.bestScore === null ? payload.bestScore : undefined,
   };
 }
 

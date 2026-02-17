@@ -48,6 +48,17 @@ python -m app.scripts.ingest_pdf --file ".\data\docs\SOF-IA CHATBOT CONSULTORIO 
 - `--batch-size`
 - `--version`
 - `--dry-run`
+- `--replace-source` (borra docs previos del mismo source)
+
+## Actualizar corpus tras cambiar PDF
+
+Si cambiaste el documento y quieres evitar que queden chunks viejos:
+
+```powershell
+python -m app.scripts.ingest_pdf --file ".\data\docs\SOF-IA CHATBOT CONSULTORIO JURIDICO V2.0.docx.pdf" --doc-id "consultorio-juridico-v2" --source "consultorio_juridico" --version "v2" --replace-source --chunk-size 1000 --overlap 150 --batch-size 32
+```
+
+Esto elimina primero todos los documentos con `source=consultorio_juridico` y luego ingesta la nueva version.
 
 ## Idempotencia y reintentos
 

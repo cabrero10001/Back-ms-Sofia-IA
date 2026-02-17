@@ -27,6 +27,116 @@ Flujo conversacional recomendado (stateful):
 - `soporte` o `2` -> flujo de soporte
 - `reset` -> reinicia estado de conversacion
 
+## Orden ideal del flujo end-to-end
+
+1. `whatsapp-adapter-service` recibe el mensaje del proveedor (Baileys/Builderbot).
+2. `whatsapp-adapter-service` llama a `POST /v1/orchestrator/handle-message` en `orchestrator-service`.
+3. `orchestrator-service` decide el flow/step:
+   - **consulta laboral/jurídica** -> llama a `POST /v1/ai/rag-answer` en `ms-ia-orquestacion`.
+   - **soporte** -> sigue flujo de soporte (sin RAG).
+   - **reset** -> limpia estado y vuelve al menú.
+4. `orchestrator-service` responde al adapter con `responses[]` y `correlationId` para trazabilidad.
+5. `whatsapp-adapter-service` envía al usuario el `responses[0].text`.
+
+## Contrato recomendado (ideal)
+
+Formato recomendado para clientes (incluyendo whatsapp-adapter):
+
+```json
+{
+  "tenantId": "tenant_ai_demo",
+  "channel": "webchat",
+  "externalUserId": "user-123",
+  "message": {
+    "type": "text",
+    "text": "laboral",
+    "payload": {
+      "providerRaw": {}
+    }
+  }
+}
+```
+
+Regla: `message.text` es el texto canónico. El orquestador mantiene compatibilidad hacia atras y tambien acepta:
+
+- `text` (root)
+- `message.message`
+- `message.body`
+- `message.text.body`
+
+Payload mínimo recomendado hacia orchestrator:
+
+```json
+{
+  "tenantId": "tenant_ai_demo",
+  "channel": "whatsapp",
+  "externalUserId": "573001112233",
+  "message": {
+    "type": "text",
+    "text": "laboral"
+  }
+}
+```
+
+`message.payload` se puede usar para adjuntar metadata raw del provider si se necesita auditoría/debug.
+
+## Payload recomendado hacia RAG
+
+Endpoint: `POST http://127.0.0.1:3040/v1/ai/rag-answer`
+
+Forma mínima:
+
+```json
+{ "query": "¿Cuántos días de vacaciones me corresponden?" }
+```
+
+Forma alterna:
+
+```json
+{
+  "question": "¿Cuántos días de vacaciones me corresponden?",
+  "source": "consultorio_juridico",
+  "tenantId": "tenant_ai_demo"
+}
+```
+
+Con filtros:
+
+```json
+{
+  "query": "¿Cómo se calcula liquidación?",
+  "filters": {
+    "source": "consultorio_juridico",
+    "tenantId": "tenant_ai_demo"
+  }
+}
+```
+
+### curl (copiable)
+
+```bash
+curl -X POST "http://127.0.0.1:3040/v1/ai/rag-answer" \
+  -H "Content-Type: application/json" \
+  -H "x-correlation-id: rag-manual-001" \
+  -d '{"query":"¿Cómo se calcula liquidación?","filters":{"source":"consultorio_juridico","tenantId":"tenant_ai_demo"}}'
+```
+
+### PowerShell (UTF-8 recomendado para FastAPI)
+
+```powershell
+$payload = @{
+  query = "¿Cómo se calcula liquidación?"
+  filters = @{ source = "consultorio_juridico"; tenantId = "tenant_ai_demo" }
+}
+$json = $payload | ConvertTo-Json -Depth 10
+$bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:3040/v1/ai/rag-answer" `
+  -Headers @{ "x-correlation-id" = "rag-manual-001" } `
+  -ContentType "application/json; charset=utf-8" `
+  -Body $bytes
+```
+
 ## Ejecutar
 
 ```bash
@@ -107,6 +217,41 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:3021/v1/orchestrator/handl
   -ContentType "application/json" `
   -Body "{\"tenantId\":\"tenant_ai_demo\",\"channel\":\"webchat\",\"externalUserId\":\"$user\",\"message\":{\"type\":\"text\",\"text\":\"reset\"}}" | ConvertTo-Json -Depth 20
 ```
+
+### F2) Nota PowerShell (JSON robusto)
+
+Para evitar errores de parseo en algunos clientes/servicios, puedes enviar bytes UTF-8:
+
+```powershell
+$payload = @{
+  tenantId = "tenant_ai_demo"
+  channel = "webchat"
+  externalUserId = "ps-user"
+  message = @{ type = "text"; text = "Hola" }
+}
+$json = $payload | ConvertTo-Json -Depth 10
+$bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+
+Invoke-RestMethod -Method Post -Uri "http://localhost:3021/v1/orchestrator/handle-message" `
+  -ContentType "application/json; charset=utf-8" `
+  -Body $bytes
+```
+
+### F3) Verificacion automatica de input variants
+
+Con el servicio levantado:
+
+```bash
+pnpm -C apps/orchestrator-service verify:input
+```
+
+El script valida:
+
+- Hola -> menu
+- laboral -> sale del menu y pasa a step laboral
+- soporte -> pasa a collecting_issue
+- reset -> reinicia
+- matriz de variantes de texto (`root.text`, `message.message`, `message.text`, `message.body`, `message.text.body`)
 
 ### G) Prueba end-to-end por WhatsApp
 

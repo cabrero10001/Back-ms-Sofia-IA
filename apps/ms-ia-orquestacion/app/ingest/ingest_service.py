@@ -33,6 +33,7 @@ class IngestOptions:
     min_chunk_size: int
     batch_size: int
     dry_run: bool
+    replace_source: bool
 
 
 @dataclass
@@ -50,6 +51,7 @@ class IngestReport:
     estimatedTokens: int
     estimatedEmbeddingCostUsd: float
     durationMs: int
+    sourceDocsDeleted: int
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -141,11 +143,22 @@ class PDFIngestService:
                 estimatedTokens=estimated_tokens,
                 estimatedEmbeddingCostUsd=estimated_cost,
                 durationMs=duration_ms,
+                sourceDocsDeleted=0,
             )
 
         inserted = 0
         updated = 0
         skipped = 0
+        source_docs_deleted = 0
+
+        if options.replace_source:
+            delete_result = self.collection.delete_many({"source": options.source})
+            source_docs_deleted = int(delete_result.deleted_count)
+            logger.info(
+                "ingest_pdf replace_source=true source=%s deleted=%d",
+                options.source,
+                source_docs_deleted,
+            )
 
         chunk_hashes = [_hash_chunk(options.doc_id, chunk) for chunk in chunks]
         existing = self.collection.find(
@@ -207,6 +220,7 @@ class PDFIngestService:
             estimatedTokens=estimated_tokens,
             estimatedEmbeddingCostUsd=estimated_cost,
             durationMs=duration_ms,
+            sourceDocsDeleted=source_docs_deleted,
         )
         logger.info("ingest_pdf end report=%s", json.dumps(report.to_dict(), ensure_ascii=True))
         return report
@@ -221,6 +235,7 @@ def build_ingest_options(
     batch_size: int | None,
     dry_run: bool,
     version: str | None,
+    replace_source: bool,
 ) -> IngestOptions:
     settings = get_settings()
     path = Path(file_path)
@@ -236,4 +251,5 @@ def build_ingest_options(
         min_chunk_size=settings.min_chunk_size,
         batch_size=batch_size or settings.embedding_batch_size,
         dry_run=dry_run,
+        replace_source=replace_source,
     )

@@ -36,6 +36,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, default=None, help="Tamano de batch para embeddings")
     parser.add_argument("--version", type=str, default=None, help="Version logica del documento")
     parser.add_argument("--dry-run", action="store_true", help="No inserta en Mongo, solo calcula reporte")
+    parser.add_argument("--replace-source", action="store_true", help="Elimina docs previos del mismo source antes de ingestar")
     return parser
 
 
@@ -56,10 +57,11 @@ def main() -> int:
             batch_size=args.batch_size,
             dry_run=args.dry_run,
             version=args.version,
+            replace_source=args.replace_source,
         )
 
         logger.info(
-            "ingest_cli env=%s file=%s source=%s chunk_size=%d overlap=%d batch_size=%d dry_run=%s",
+            "ingest_cli env=%s file=%s source=%s chunk_size=%d overlap=%d batch_size=%d dry_run=%s replace_source=%s",
             settings.env_path,
             options.file_path,
             options.source,
@@ -67,6 +69,7 @@ def main() -> int:
             options.overlap,
             options.batch_size,
             options.dry_run,
+            options.replace_source,
         )
 
         service = PDFIngestService()
