@@ -49,10 +49,13 @@ app.add_middleware(
 
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
-    request_id = request.headers.get("x-request-id", str(uuid.uuid4()))
+    correlation_id = request.headers.get("x-correlation-id")
+    request_id = correlation_id or request.headers.get("x-request-id", str(uuid.uuid4()))
     request.state.request_id = request_id
+    request.state.correlation_id = correlation_id or request_id
     response: Response = await call_next(request)
     response.headers["X-Request-Id"] = request_id
+    response.headers["X-Correlation-Id"] = str(getattr(request.state, "correlation_id", request_id))
     return response
 
 
@@ -99,7 +102,10 @@ async def generic_exception_handler(request: Request, exc: Exception):
 @app.on_event("startup")
 def startup_debug_summary() -> None:
     logger.info(
-        "startup_config openai_key=%s openai_model=%s rag_topk=%s rerank_enabled=%s rerank_top_k=%s temperature=%s mongo=%s",
+        "startup_config env_path=%s env_exists=%s cwd=%s openai_key=%s openai_model=%s rag_topk=%s rerank_enabled=%s rerank_top_k=%s temperature=%s mongo=%s",
+        ENV_PATH,
+        os.path.exists(ENV_PATH),
+        os.getcwd(),
         bool(os.getenv("OPENAI_API_KEY")),
         os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
         os.getenv("RAG_TOPK", "20"),

@@ -90,6 +90,12 @@ Notas:
 - `GET /pairing` -> resumen de pairing (incluye codigo si disponible)
 - `GET /pairing-code` -> codigo de pairing y ultimo error
 
+## Flujo conversacional
+
+- El adapter funciona como puente: reenvia mensajes al `orchestrator-service` y responde exactamente el texto retornado.
+- No mantiene logica local de ciudad/edad/asesor.
+- Los logs incluyen `correlationId` para trazabilidad entre adapter -> orchestrator -> ms-ia.
+
 ## Limitaciones de Baileys
 
 - Evitar botones/listas/interactive messages por compatibilidad.

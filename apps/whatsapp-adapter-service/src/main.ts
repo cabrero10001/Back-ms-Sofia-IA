@@ -8,6 +8,7 @@ import {
   EVENTS,
   MemoryDB,
 } from '@builderbot/bot';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 
 config();
@@ -43,6 +44,7 @@ type OrchestratorMessageOut = {
 type OrchestratorPayload = {
   conversationId?: string;
   contactId?: string;
+  correlationId?: string;
   responses?: OrchestratorMessageOut[];
   replyText?: string;
   message?: string;
@@ -211,6 +213,7 @@ async function callOrchestrator(input: {
   pushName?: string;
   body: string;
   providerMessageId: string;
+  correlationId: string;
 }): Promise<OrchestratorPayload> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15_000);
@@ -233,6 +236,8 @@ async function callOrchestrator(input: {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-correlation-id': input.correlationId,
+        'x-request-id': input.correlationId,
       },
       body: JSON.stringify(payload),
       signal: controller.signal,
@@ -454,6 +459,7 @@ async function bootstrap(): Promise<void> {
 
   const welcomeFlow = addKeyword(EVENTS.WELCOME).addAction(async (ctx: any, { flowDynamic }: { flowDynamic: (message: string) => Promise<void> }) => {
     const providerMessageId = String((ctx as { id?: string }).id ?? `${Date.now()}-${ctx.from}`);
+    const correlationId = providerMessageId || randomUUID();
     const text = String(ctx.body ?? '').trim();
 
     if (!text) return;
@@ -462,6 +468,7 @@ async function bootstrap(): Promise<void> {
       log('debug', 'duplicate_message_ignored', {
         from: ctx.from,
         providerMessageId,
+        correlationId,
       });
       return;
     }
@@ -470,6 +477,7 @@ async function bootstrap(): Promise<void> {
     log('info', 'incoming_message', {
       from: ctx.from,
       providerMessageId,
+      correlationId,
       text: truncateText(text),
     });
 
@@ -479,14 +487,20 @@ async function bootstrap(): Promise<void> {
         pushName: (ctx as { pushName?: string }).pushName,
         body: text,
         providerMessageId,
+        correlationId,
       });
 
       const reply = extractReplyText(orchestratorRes);
       await flowDynamic(reply);
 
+      const orchestrationCorrelationId = orchestratorRes.correlationId
+        ?? orchestratorRes.responses?.[0]?.payload?.correlationId;
+
       log('info', 'orchestrator_replied', {
         from: ctx.from,
         providerMessageId,
+        correlationId,
+        orchestrationCorrelationId,
         status: 'ok',
         latencyMs: Date.now() - startedAt,
       });
@@ -494,6 +508,7 @@ async function bootstrap(): Promise<void> {
       log('error', 'orchestrator_error', {
         from: ctx.from,
         providerMessageId,
+        correlationId,
         status: 'error',
         latencyMs: Date.now() - startedAt,
         error: error instanceof Error ? error.message : String(error),

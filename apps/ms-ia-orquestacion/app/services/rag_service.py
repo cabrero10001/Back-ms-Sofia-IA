@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
+from dotenv import find_dotenv, load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from openai import OpenAI
 from pymongo import MongoClient
@@ -25,6 +26,16 @@ except Exception:  # pragma: no cover
     certifi = None
 
 logger = logging.getLogger("ms-ia-orquestacion")
+
+from app.rag.service import RetrievalPipelineService
+
+# Carga .env de forma explicita para evitar diferencias por working directory.
+SERVICE_ENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+_fallback_env_path = find_dotenv(".env", usecwd=True)
+if os.path.exists(SERVICE_ENV_PATH):
+    load_dotenv(dotenv_path=SERVICE_ENV_PATH, override=False)
+elif _fallback_env_path:
+    load_dotenv(dotenv_path=_fallback_env_path, override=False)
 
 # ---------------------------------------------------------------------------
 # Configuracion desde variables de entorno
@@ -58,6 +69,7 @@ MONGO_SOCKET_TIMEOUT_MS = int(os.getenv("MONGO_SOCKET_TIMEOUT_MS", "20000"))
 MONGO_CONNECT_TIMEOUT_MS = int(os.getenv("MONGO_CONNECT_TIMEOUT_MS", "5000"))
 MONGO_TLS_CA_FILE = os.getenv("MONGO_TLS_CA_FILE", "")
 MONGO_TLS_ALLOW_INVALID_CERTS = os.getenv("MONGO_TLS_ALLOW_INVALID_CERTS", "false").lower() in {"1", "true", "yes", "on"}
+MONGO_TLS_DISABLE_OCSP_ENDPOINT_CHECK = os.getenv("MONGO_TLS_DISABLE_OCSP_ENDPOINT_CHECK", "true").lower() in {"1", "true", "yes", "on"}
 
 # ---------------------------------------------------------------------------
 # Flashrank (reranker local) – carga opcional, fallback a OpenAI rerank
@@ -116,6 +128,43 @@ def _safe_mongo_target(uri: str) -> str:
     return f"{host}/{MONGODB_DB}"
 
 
+def _safe_mongo_summary(uri: str) -> dict[str, Any]:
+    """Retorna URI de Mongo sanitizado para logs/diagnostico."""
+    if not uri:
+        return {
+            "uriExists": False,
+            "user": None,
+            "host": None,
+            "db": MONGODB_DB,
+            "collection": MONGODB_COLLECTION,
+            "index": MONGODB_VECTOR_INDEX,
+        }
+
+    parsed = urlparse(uri)
+    host = parsed.netloc.split("@")[-1] if parsed.netloc else None
+    user = None
+    if parsed.username:
+        user = parsed.username
+    elif "@" in parsed.netloc:
+        user = parsed.netloc.split("@", 1)[0].split(":", 1)[0]
+
+    return {
+        "uriExists": True,
+        "user": user,
+        "host": host,
+        "db": MONGODB_DB,
+        "collection": MONGODB_COLLECTION,
+        "index": MONGODB_VECTOR_INDEX,
+    }
+
+
+def get_runtime_env_summary() -> dict[str, Any]:
+    summary = _safe_mongo_summary(MONGODB_URI)
+    summary["envPath"] = SERVICE_ENV_PATH
+    summary["envPathExists"] = os.path.exists(SERVICE_ENV_PATH)
+    return summary
+
+
 # ===========================================================================
 # RAGService
 # ===========================================================================
@@ -151,6 +200,8 @@ class RAGService:
         }
         if MONGO_TLS_ALLOW_INVALID_CERTS:
             mongo_kwargs["tlsAllowInvalidCertificates"] = True
+        if MONGO_TLS_DISABLE_OCSP_ENDPOINT_CHECK:
+            mongo_kwargs["tlsDisableOCSPEndpointCheck"] = True
         elif MONGO_TLS_CA_FILE:
             mongo_kwargs["tlsCAFile"] = MONGO_TLS_CA_FILE
         elif certifi is not None:
@@ -161,7 +212,15 @@ class RAGService:
         self._collection = self._db[MONGODB_COLLECTION]
 
         # Fuerza handshake temprano para fallar rapido si hay problema de red/DNS/auth
-        self._mongo_client.admin.command("ping")
+        try:
+            self._mongo_client.admin.command("ping")
+        except OperationFailure as exc:
+            error_msg = str(exc)
+            if "authentication failed" in error_msg.lower() or "bad auth" in error_msg.lower():
+                raise RuntimeError("MongoDB auth failed: revisa usuario/password/db en MONGODB_URI") from exc
+            raise RuntimeError(f"MongoDB ping failed: {error_msg}") from exc
+        except PyMongoError as exc:
+            raise RuntimeError(f"MongoDB ping failed: {exc}") from exc
 
         # ── Text splitter (LangChain) ──
         self._splitter = RecursiveCharacterTextSplitter(
@@ -173,10 +232,11 @@ class RAGService:
 
         ensure_index_notes()
         logger.info(
-            "RAGService inicializado (mongo=%s, mongo_tls_ca=%s, insecure_tls=%s, embed_model=%s, dims=%d, chunk=%d, topk=%d, rerank_enabled=%s, rerank_top_k=%d, openai_timeout_s=%.1f)",
+            "RAGService inicializado (mongo=%s, mongo_tls_ca=%s, insecure_tls=%s, ocsp_disabled=%s, embed_model=%s, dims=%d, chunk=%d, topk=%d, rerank_enabled=%s, rerank_top_k=%d, openai_timeout_s=%.1f)",
             _safe_mongo_target(MONGODB_URI),
             "set" if (MONGO_TLS_CA_FILE or certifi is not None) else "not-set",
             MONGO_TLS_ALLOW_INVALID_CERTS,
+            MONGO_TLS_DISABLE_OCSP_ENDPOINT_CHECK,
             RAG_EMBED_MODEL,
             RAG_EMBED_DIM,
             RAG_CHUNK_SIZE,
@@ -185,6 +245,31 @@ class RAGService:
             RAG_RERANK_TOP_K,
             RAG_OPENAI_TIMEOUT_S,
         )
+        mongo_summary = _safe_mongo_summary(MONGODB_URI)
+        logger.info(
+            "RAGService mongo_summary user=%s host=%s db=%s collection=%s index=%s",
+            mongo_summary.get("user"),
+            mongo_summary.get("host"),
+            mongo_summary.get("db"),
+            mongo_summary.get("collection"),
+            mongo_summary.get("index"),
+        )
+
+        self._pipeline = RetrievalPipelineService(
+            collection=self._collection,
+            openai_client=self._openai,
+            embedding_model=RAG_EMBED_MODEL,
+            answer_model=OPENAI_MODEL,
+        )
+
+    def diagnostics(self) -> dict[str, Any]:
+        info = get_runtime_env_summary()
+        try:
+            ping_result = self._mongo_client.admin.command("ping")
+            info["ping"] = {"ok": bool(ping_result.get("ok", 0) == 1)}
+        except Exception as exc:  # pragma: no cover
+            info["ping"] = {"ok": False, "error": str(exc)}
+        return info
 
     # ─── Embeddings ───────────────────────────────────────────────────────
 
@@ -308,6 +393,8 @@ class RAGService:
             return results
         except OperationFailure as exc:
             error_msg = str(exc)
+            if "authentication failed" in error_msg.lower() or "bad auth" in error_msg.lower():
+                raise RuntimeError("MongoDB auth failed durante retrieve: revisa usuario/password/db en MONGODB_URI") from exc
             if "index not found" in error_msg.lower() or "atlas" in error_msg.lower():
                 raise RuntimeError(
                     f"Indice vectorial '{MONGODB_VECTOR_INDEX}' no encontrado en la coleccion "
@@ -430,96 +517,21 @@ class RAGService:
     # ─── Answer (pipeline completo) ───────────────────────────────────────
 
     def rag_answer(self, query: str, filters: dict[str, Any] | None = None) -> dict[str, Any]:
-        """
-        Pipeline completo: retrieve(topK=5) -> rerank(k=5) -> generate answer.
+        return self._pipeline.answer(query=query, incoming_filters=filters)
 
-        Retorna { answer, citations, usedChunks }.
-        """
-        total_started = time.perf_counter()
-        logger.info("RAG marker=start")
-
-        # 1) Retrieve
-        retrieve_started = time.perf_counter()
-        candidates = self._retrieve(query, topk=RAG_TOPK)
-        retrieve_ms = round((time.perf_counter() - retrieve_started) * 1000, 2)
-        logger.info("RAG marker=after-retrieve candidates=%d duration_ms=%.2f", len(candidates), retrieve_ms)
-
-        if not candidates:
-            total_ms = round((time.perf_counter() - total_started) * 1000, 2)
-            logger.info("RAG marker=end duration_ms=%.2f result=no_context", total_ms)
-            return {
-                "answer": "No tengo esa informacion en los documentos.",
-                "citations": [],
-                "usedChunks": [],
-            }
-
-        # 2) Rerank
-        rerank_started = time.perf_counter()
-        top_chunks = self._rerank(query, candidates)
-        rerank_ms = round((time.perf_counter() - rerank_started) * 1000, 2)
-        logger.info("RAG marker=after-rerank top_chunks=%d duration_ms=%.2f", len(top_chunks), rerank_ms)
-
-        # 3) Construir contexto con source y chunkIndex
-        context_parts: list[str] = []
-        citations: list[dict[str, Any]] = []
-        used_chunks: list[dict[str, Any]] = []
-
-        for chunk in top_chunks:
-            source = chunk.get("source", "")
-            chunk_index = chunk.get("chunkIndex", 0)
-            chunk_text = chunk.get("chunkText", "")
-            score = round(chunk.get("score", 0.0), 4)
-
-            context_parts.append(f"[Fuente: {source}, Fragmento: {chunk_index}]\n{chunk_text}")
-
-            citations.append({"source": source, "chunkIndex": chunk_index})
-            used_chunks.append({
-                "source": source,
-                "chunkIndex": chunk_index,
-                "chunkText": chunk_text,
-                "score": score,
-                "title": chunk.get("title", ""),
-            })
-
-        context = "\n\n---\n\n".join(context_parts)
-
-        # 4) Generar respuesta
-        system_prompt = (
-            "Eres un asistente experto. Responde SOLO con base en el contexto proporcionado. "
-            "Si no hay informacion suficiente en el contexto para responder, di exactamente: "
-            '"No tengo esa informacion en los documentos." '
-            "Responde de forma clara, concisa y en espanol."
+    def rag_evaluate(
+        self,
+        query: str,
+        filters: dict[str, Any] | None = None,
+        overrides: dict[str, Any] | None = None,
+        dry_run: bool = True,
+    ) -> dict[str, Any]:
+        return self._pipeline.evaluate(
+            query=query,
+            incoming_filters=filters,
+            overrides=overrides,
+            dry_run=dry_run,
         )
-        user_prompt = (
-            f"Contexto:\n{context}\n\n"
-            f"Pregunta: {query}\n\n"
-            "Responde basandote unicamente en el contexto anterior."
-        )
-
-        logger.info("RAG marker=before-openai")
-        openai_started = time.perf_counter()
-        completion = self._openai.chat.completions.create(
-            model=OPENAI_MODEL,
-            temperature=RAG_OPENAI_TEMPERATURE,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        openai_ms = round((time.perf_counter() - openai_started) * 1000, 2)
-        logger.info("RAG marker=after-openai duration_ms=%.2f", openai_ms)
-
-        answer = completion.choices[0].message.content or ""
-        logger.info("RAG answer: respuesta generada (%d chars), %d citations", len(answer), len(citations))
-
-        total_ms = round((time.perf_counter() - total_started) * 1000, 2)
-        logger.info("RAG marker=end duration_ms=%.2f", total_ms)
-
-        return {
-            "answer": answer,
-            "citations": citations,
-            "usedChunks": used_chunks,
-        }
 
 
 # ---------------------------------------------------------------------------

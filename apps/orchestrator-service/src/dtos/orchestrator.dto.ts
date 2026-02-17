@@ -26,6 +26,7 @@ export const MessageOutSchema = z.object({
 export const OrchestratorResponseSchema = z.object({
   conversationId: z.string().uuid(),
   contactId: z.string().uuid(),
+  correlationId: z.string().min(1).optional(),
   responses: z.array(MessageOutSchema),
 });
 

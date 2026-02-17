@@ -3,7 +3,7 @@ Schemas Pydantic para los endpoints RAG (rag-ingest + rag-answer).
 """
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # ── Ingest ────────────────────────────────────────────────────────────────
@@ -35,10 +35,21 @@ class RagIngestResponse(BaseModel):
 class RagAnswerRequest(BaseModel):
     """Body del POST /v1/ai/rag-answer."""
 
-    query: str = Field(..., min_length=1, max_length=4000)
+    query: Optional[str] = Field(default=None, min_length=1, max_length=4000)
+    question: Optional[str] = Field(default=None, min_length=1, max_length=4000)
+    source: Optional[str] = Field(default=None, min_length=1)
+    tenantId: Optional[str] = Field(default=None, min_length=1)
     filters: Optional[dict[str, Any]] = Field(default=None, description="Filtros opcionales")
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def ensure_query(self) -> "RagAnswerRequest":
+        resolved = (self.query or self.question or "").strip()
+        if not resolved:
+            raise ValueError("Debes enviar 'query' o 'question'")
+        self.query = resolved
+        return self
 
 
 class RagCitation(BaseModel):
