@@ -24,6 +24,6 @@ def build_grounded_prompt(query: str, top_chunks: list[ChunkCandidate]) -> tuple
     user_prompt = (
         f"Pregunta: {query}\n\n"
         f"Contexto verificable:\n{context}\n\n"
-        "Da una respuesta breve y agrega referencias entre parentesis con formato (source:chunkIndex)."
+        "Da una respuesta breve, clara y sin mencionar fuentes, chunkIndex ni referencias tecnicas."
     )
     return system_prompt, user_prompt

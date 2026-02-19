@@ -17,7 +17,18 @@ const log = createLogger('orchestrator-service-logic');
 const conversationStore = new ConversationStore(env.ORCH_CONV_TTL_MIN * 60_000);
 
 type Intent = 'general' | 'consulta_laboral' | 'consulta_juridica' | 'soporte';
-type Step = 'ask_intent' | 'ask_city' | 'ask_age' | 'collecting_issue' | 'ready_for_handoff' | 'ask_issue';
+type Step =
+  | 'ask_intent'
+  | 'ask_city'
+  | 'ask_age'
+  | 'collecting_issue'
+  | 'ready_for_handoff'
+  | 'ask_issue'
+  | 'offer_appointment'
+  | 'ask_appointment_mode'
+  | 'ask_appointment_day'
+  | 'ask_appointment_time'
+  | 'confirm_appointment';
 
 interface OrchestratorContext {
   intent?: Intent;
@@ -32,8 +43,23 @@ interface Decision {
   nextStep: Step;
 }
 
-const RAG_NO_SUPPORT_FALLBACK =
-  'No encontré esa información en el documento. ¿Puedes dar más detalles (tipo de contrato, tiempo laborado, ciudad/país, y qué ocurrió)?';
+const RAG_NEEDS_CONTEXT_FALLBACK =
+  'Para ayudarte mejor, necesito un poco más de contexto. Cuéntame el tipo de contrato, tiempo laborado, ciudad/país y qué ocurrió exactamente.';
+
+const RAG_NO_CONTENT_FALLBACK =
+  'No puedo responder esa pregunta porque en este momento no hay contenido relacionado en la base documental disponible.';
+
+const APPOINTMENT_OFFER_TEXT =
+  '¿Deseas agendar una cita con un asesor profesional? Responde: "si, deseo agendar una cita" o "no, gracias".';
+
+const APPOINTMENT_MODE_TEXT =
+  'Perfecto. Elige la modalidad de la cita: presencial o virtual.';
+
+const FOLLOWUP_HINT_TEXT =
+  'Si tienes otra duda escribe reset. Si deseas terminar la conversación, escribe salir.';
+
+const GOODBYE_TEXT =
+  '¡Con gusto! Me alegra haberte ayudado. Si quieres volver luego, escribe reset. ¡Hasta pronto!';
 
 const RAG_ERROR_FALLBACK =
   'En este momento no pude consultar la base jurídica. Por favor cuéntame más contexto y lo intento de nuevo.';
@@ -57,6 +83,14 @@ function mapMessageType(type: MessageIn['message']['type']): ConversationMessage
 
 function normalizeText(text?: string): string {
   return (text ?? '').trim().toLowerCase();
+}
+
+function normalizeForMatch(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 }
 
 function pickString(value: unknown): string | undefined {
@@ -127,6 +161,167 @@ function isResetCommand(text: string): boolean {
   return ['reset', 'reiniciar', 'menu', 'menú', 'inicio', 'empezar'].includes(text);
 }
 
+function isConversationEndCommand(text: string): boolean {
+  return [
+    'salir',
+    'terminar',
+    'finalizar',
+    'fin',
+    'adios',
+    'adiós',
+    'chao',
+    'hasta luego',
+    'hasta pronto',
+    'bye',
+  ].includes(text);
+}
+
+function isNoMoreDoubtsMessage(text: string): boolean {
+  return [
+    'gracias',
+    'muchas gracias',
+    'listo gracias',
+    'listo muchas gracias',
+    'eso es todo',
+    'todo claro',
+    'no tengo mas dudas',
+    'no tengo más dudas',
+    'ninguna duda',
+  ].includes(text);
+}
+
+function isAnotherQuestionPrompt(text: string): boolean {
+  return text.includes('otra duda') || text.includes('otra consulta');
+}
+
+function isPositiveReply(text: string): boolean {
+  const normalized = normalizeForMatch(text);
+  return [
+    'si',
+    's',
+    'claro',
+    'de acuerdo',
+    'ok',
+    'okay',
+    'dale',
+    'de una',
+  ].includes(normalized);
+}
+
+function isNegativeReply(text: string): boolean {
+  const normalized = normalizeForMatch(text);
+  return [
+    'no',
+    'no gracias',
+    'por ahora no',
+    'ahora no',
+  ].includes(normalized);
+}
+
+function isScheduleAppointmentRequest(text: string): boolean {
+  const normalized = normalizeForMatch(text);
+  return normalized.includes('agendar') && normalized.includes('cita');
+}
+
+function pickAppointmentMode(text: string): 'virtual' | 'presencial' | undefined {
+  const normalized = normalizeForMatch(text);
+  if (normalized.includes('virtual')) return 'virtual';
+  if (normalized.includes('presencial')) return 'presencial';
+  return undefined;
+}
+
+function pickWeekday(text: string): 'lunes' | 'martes' | 'miercoles' | 'jueves' | 'viernes' | undefined {
+  const normalized = normalizeForMatch(text);
+  if (normalized.includes('lunes')) return 'lunes';
+  if (normalized.includes('martes')) return 'martes';
+  if (normalized.includes('miercoles')) return 'miercoles';
+  if (normalized.includes('jueves')) return 'jueves';
+  if (normalized.includes('viernes')) return 'viernes';
+  return undefined;
+}
+
+function hasWeekendMention(text: string): boolean {
+  const normalized = normalizeForMatch(text);
+  return normalized.includes('sabado') || normalized.includes('domingo');
+}
+
+function pickHour24(text: string): number | undefined {
+  const normalized = normalizeForMatch(text);
+  const match = normalized.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
+  if (!match) return undefined;
+
+  const rawHour = Number.parseInt(match[1], 10);
+  if (!Number.isFinite(rawHour)) return undefined;
+
+  const suffix = match[3];
+  const hasMorning = normalized.includes('manana');
+  const hasAfternoon = normalized.includes('tarde');
+
+  let hour = rawHour;
+  if (suffix === 'am') {
+    if (hour === 12) hour = 0;
+  } else if (suffix === 'pm') {
+    if (hour < 12) hour += 12;
+  } else if (hasMorning) {
+    if (hour === 12) hour = 0;
+  } else if (hasAfternoon) {
+    if (hour < 12) hour += 12;
+  }
+
+  if (hour < 0 || hour > 23) return undefined;
+  return hour;
+}
+
+function isHourAllowedByMode(mode: 'virtual' | 'presencial', hour24: number): boolean {
+  if (mode === 'virtual') return hour24 >= 8 && hour24 <= 17;
+  return hour24 >= 13 && hour24 <= 17;
+}
+
+function formatHour(hour24: number): string {
+  const suffix = hour24 >= 12 ? 'PM' : 'AM';
+  const raw = hour24 % 12;
+  const hour12 = raw === 0 ? 12 : raw;
+  return `${hour12}:00 ${suffix}`;
+}
+
+function appointmentHourHint(mode: 'virtual' | 'presencial'): string {
+  if (mode === 'virtual') {
+    return 'Horario virtual disponible: lunes a viernes de 8:00 AM a 5:00 PM.';
+  }
+  return 'Horario presencial disponible: lunes a viernes de 1:00 PM a 5:00 PM.';
+}
+
+function formatWeekday(day: 'lunes' | 'martes' | 'miercoles' | 'jueves' | 'viernes'): string {
+  if (day === 'miercoles') return 'miércoles';
+  return day;
+}
+
+function isAppointmentConfirmCommand(text: string): boolean {
+  const normalized = normalizeForMatch(text);
+  return normalized === 'confirmar cita'
+    || normalized === 'confirmar'
+    || normalized === 'confirmo'
+    || normalized === 'sin cambios'
+    || normalized === 'no cambios'
+    || normalized === 'esta bien'
+    || normalized === 'está bien';
+}
+
+function isAppointmentChangeModeCommand(text: string): boolean {
+  const normalized = normalizeForMatch(text);
+  return normalized.includes('cambiar modalidad') || normalized === 'modalidad';
+}
+
+function isAppointmentChangeDayCommand(text: string): boolean {
+  const normalized = normalizeForMatch(text);
+  return normalized.includes('cambiar dia') || normalized === 'dia';
+}
+
+function isAppointmentChangeHourCommand(text: string): boolean {
+  const normalized = normalizeForMatch(text);
+  return normalized.includes('cambiar hora') || normalized === 'hora';
+}
+
 function isLaboralSelection(text: string): boolean {
   return text === '1' || text.includes('laboral') || text.includes('jurid') || text.includes('trabajo');
 }
@@ -149,6 +344,8 @@ type StatefulFlowResult = {
   payload: Record<string, unknown>;
 };
 
+type RagFallbackKind = 'none' | 'needs_context' | 'no_content';
+
 async function resolveLaboralQuery(input: {
   queryText: string;
   correlationId: string;
@@ -168,8 +365,13 @@ async function resolveLaboralQuery(input: {
   const ragStartedAt = Date.now();
   try {
     const ragResult = await askRag(query, input.correlationId);
-    const isNoSupport = isRagNoSupport(ragResult);
-    const responseText = isNoSupport ? RAG_NO_SUPPORT_FALLBACK : buildRagWhatsappText(ragResult);
+    const fallbackKind = pickRagFallbackKind(ragResult);
+    const isNoSupport = fallbackKind !== 'none';
+    const responseText = fallbackKind === 'none'
+      ? buildRagWhatsappText(ragResult)
+      : fallbackKind === 'no_content'
+        ? RAG_NO_CONTENT_FALLBACK
+        : RAG_NEEDS_CONTEXT_FALLBACK;
 
     log.info(
       {
@@ -195,6 +397,7 @@ async function resolveLaboralQuery(input: {
           citationsCount: ragResult.citations.length,
           usedChunksCount: ragResult.usedChunks.length,
           noSupport: isNoSupport,
+          noSupportKind: fallbackKind,
         },
       },
       noSupport: isNoSupport,
@@ -249,7 +452,312 @@ async function runStatefulFlow(input: {
     };
   }
 
+  if (isConversationEndCommand(input.text)) {
+    conversationStore.clear(key);
+    conversationStore.set(key, defaultState());
+    return {
+      responseText: GOODBYE_TEXT,
+      patch: { intent: 'general', step: 'ask_intent', profile: {} },
+      payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', ended: true },
+    };
+  }
+
   const state = conversationStore.get(key) ?? conversationStore.set(key, defaultState());
+  const profile = (state.profile ?? {}) as Record<string, unknown>;
+  const appointment = (typeof profile.appointment === 'object' && profile.appointment !== null)
+    ? (profile.appointment as Record<string, unknown>)
+    : {};
+
+  if (state.category === 'laboral' && state.stage === 'awaiting_appointment_opt') {
+    if (isScheduleAppointmentRequest(input.text) || isPositiveReply(input.text)) {
+      conversationStore.set(key, {
+        stage: 'awaiting_appointment_mode',
+        category: 'laboral',
+        profile,
+      });
+      return {
+        responseText: APPOINTMENT_MODE_TEXT,
+        patch: { intent: 'consulta_laboral', step: 'ask_appointment_mode', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'mode' },
+      };
+    }
+
+    if (isNegativeReply(input.text)) {
+      conversationStore.set(key, {
+        stage: 'awaiting_question',
+        category: 'laboral',
+        profile: {
+          ...profile,
+          appointment: undefined,
+        },
+      });
+      return {
+        responseText: `Perfecto, continuamos sin agendar cita. ${FOLLOWUP_HINT_TEXT}`,
+        patch: {
+          intent: 'consulta_laboral',
+          step: 'ask_issue',
+          profile: {
+            ...profile,
+            appointment: undefined,
+          },
+        },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'declined' },
+      };
+    }
+
+    return {
+      responseText: 'Por favor responde: "si, deseo agendar una cita" o "no, gracias".',
+      patch: { intent: 'consulta_laboral', step: 'offer_appointment', profile },
+      payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'offer' },
+    };
+  }
+
+  if (state.category === 'laboral' && state.stage === 'awaiting_appointment_mode') {
+    const mode = pickAppointmentMode(input.text);
+    if (!mode) {
+      return {
+        responseText: 'No te entendí la modalidad. Escribe: presencial o virtual.',
+        patch: { intent: 'consulta_laboral', step: 'ask_appointment_mode', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'mode_invalid' },
+      };
+    }
+
+    const nextProfile = {
+      ...profile,
+      appointment: {
+        ...appointment,
+        mode,
+      },
+    };
+
+    conversationStore.set(key, {
+      stage: 'awaiting_appointment_day',
+      category: 'laboral',
+      profile: nextProfile,
+    });
+
+    return {
+      responseText: `Perfecto, modalidad ${mode}. Ahora indica el día (lunes a viernes).`,
+      patch: { intent: 'consulta_laboral', step: 'ask_appointment_day', profile: nextProfile },
+      payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'day' },
+    };
+  }
+
+  if (state.category === 'laboral' && state.stage === 'awaiting_appointment_day') {
+    const day = pickWeekday(input.text);
+    if (!day) {
+      const weekendMsg = hasWeekendMention(input.text)
+        ? 'Solo tenemos agenda de lunes a viernes.'
+        : 'No entendí el día.';
+      return {
+        responseText: `${weekendMsg} Por favor indica un día entre lunes y viernes.`,
+        patch: { intent: 'consulta_laboral', step: 'ask_appointment_day', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'day_invalid' },
+      };
+    }
+
+    const mode = appointment.mode === 'virtual' || appointment.mode === 'presencial'
+      ? appointment.mode
+      : undefined;
+
+    if (!mode) {
+      conversationStore.set(key, {
+        stage: 'awaiting_appointment_mode',
+        category: 'laboral',
+        profile,
+      });
+      return {
+        responseText: APPOINTMENT_MODE_TEXT,
+        patch: { intent: 'consulta_laboral', step: 'ask_appointment_mode', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'mode_missing' },
+      };
+    }
+
+    const nextProfile = {
+      ...profile,
+      appointment: {
+        ...appointment,
+        mode,
+        day,
+      },
+    };
+
+    conversationStore.set(key, {
+      stage: 'awaiting_appointment_time',
+      category: 'laboral',
+      profile: nextProfile,
+    });
+
+    return {
+      responseText: `${appointmentHourHint(mode)} Indica la hora de tu cita.`,
+      patch: { intent: 'consulta_laboral', step: 'ask_appointment_time', profile: nextProfile },
+      payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'time' },
+    };
+  }
+
+  if (state.category === 'laboral' && state.stage === 'awaiting_appointment_time') {
+    const mode = appointment.mode === 'virtual' || appointment.mode === 'presencial'
+      ? appointment.mode
+      : undefined;
+    const day = pickWeekday(String(appointment.day ?? ''));
+
+    if (!mode) {
+      conversationStore.set(key, {
+        stage: 'awaiting_appointment_mode',
+        category: 'laboral',
+        profile,
+      });
+      return {
+        responseText: APPOINTMENT_MODE_TEXT,
+        patch: { intent: 'consulta_laboral', step: 'ask_appointment_mode', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'mode_missing' },
+      };
+    }
+
+    if (!day) {
+      conversationStore.set(key, {
+        stage: 'awaiting_appointment_day',
+        category: 'laboral',
+        profile,
+      });
+      return {
+        responseText: 'Primero necesito el día de la cita. Indica un día entre lunes y viernes.',
+        patch: { intent: 'consulta_laboral', step: 'ask_appointment_day', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'day_missing' },
+      };
+    }
+
+    const hour24 = pickHour24(input.text);
+    if (hour24 === undefined) {
+      return {
+        responseText: `${appointmentHourHint(mode)} Escribe la hora en formato como 8am, 3pm o 15:00.`,
+        patch: { intent: 'consulta_laboral', step: 'ask_appointment_time', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'time_invalid' },
+      };
+    }
+
+    if (!isHourAllowedByMode(mode, hour24)) {
+      return {
+        responseText: `La hora no está disponible para modalidad ${mode}. ${appointmentHourHint(mode)}`,
+        patch: { intent: 'consulta_laboral', step: 'ask_appointment_time', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'time_out_of_range' },
+      };
+    }
+
+    const nextProfile = {
+      ...profile,
+      appointment: {
+        ...appointment,
+        mode,
+        day,
+        hour24,
+      },
+    };
+
+    conversationStore.set(key, {
+      stage: 'awaiting_appointment_confirm',
+      category: 'laboral',
+      profile: nextProfile,
+    });
+
+    return {
+      responseText: `Confírmame estos datos de tu cita:\n- Modalidad: ${mode}\n- Día: ${formatWeekday(day)}\n- Hora: ${formatHour(hour24)}\n\nSi deseas cambiar un dato escribe: cambiar modalidad, cambiar dia o cambiar hora.\nSi todo está correcto escribe: confirmar cita.`,
+      patch: { intent: 'consulta_laboral', step: 'confirm_appointment', profile: nextProfile },
+      payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'confirm' },
+    };
+  }
+
+  if (state.category === 'laboral' && state.stage === 'awaiting_appointment_confirm') {
+    if (isAppointmentChangeModeCommand(input.text)) {
+      conversationStore.set(key, {
+        stage: 'awaiting_appointment_mode',
+        category: 'laboral',
+        profile,
+      });
+      return {
+        responseText: APPOINTMENT_MODE_TEXT,
+        patch: { intent: 'consulta_laboral', step: 'ask_appointment_mode', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'change_mode' },
+      };
+    }
+
+    if (isAppointmentChangeDayCommand(input.text)) {
+      conversationStore.set(key, {
+        stage: 'awaiting_appointment_day',
+        category: 'laboral',
+        profile,
+      });
+      return {
+        responseText: 'Perfecto, indícame el nuevo día (lunes a viernes).',
+        patch: { intent: 'consulta_laboral', step: 'ask_appointment_day', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'change_day' },
+      };
+    }
+
+    if (isAppointmentChangeHourCommand(input.text)) {
+      const mode = appointment.mode === 'virtual' || appointment.mode === 'presencial'
+        ? appointment.mode
+        : 'virtual';
+      conversationStore.set(key, {
+        stage: 'awaiting_appointment_time',
+        category: 'laboral',
+        profile,
+      });
+      return {
+        responseText: `Perfecto, indícame la nueva hora. ${appointmentHourHint(mode)}`,
+        patch: { intent: 'consulta_laboral', step: 'ask_appointment_time', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'change_time' },
+      };
+    }
+
+    if (isAppointmentConfirmCommand(input.text)) {
+      const mode = appointment.mode === 'virtual' || appointment.mode === 'presencial'
+        ? appointment.mode
+        : undefined;
+      const day = pickWeekday(String(appointment.day ?? ''));
+      const hour24 = typeof appointment.hour24 === 'number' ? appointment.hour24 : undefined;
+
+      if (!mode || !day || hour24 === undefined || !isHourAllowedByMode(mode, hour24)) {
+        conversationStore.set(key, {
+          stage: 'awaiting_appointment_mode',
+          category: 'laboral',
+          profile,
+        });
+        return {
+          responseText: 'Falta completar algunos datos de la cita. Vamos de nuevo con la modalidad: presencial o virtual.',
+          patch: { intent: 'consulta_laboral', step: 'ask_appointment_mode', profile },
+          payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'recollect' },
+        };
+      }
+
+      const nextProfile = {
+        ...profile,
+        lastAppointment: {
+          mode,
+          day,
+          hour24,
+        },
+      };
+
+      conversationStore.set(key, {
+        stage: 'awaiting_question',
+        category: 'laboral',
+        profile: nextProfile,
+      });
+
+      return {
+        responseText: `Listo, tu cita quedó agendada para ${formatWeekday(day)} a las ${formatHour(hour24)} en modalidad ${mode}. ${FOLLOWUP_HINT_TEXT}`,
+        patch: { intent: 'consulta_laboral', step: 'ask_issue', profile: nextProfile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'scheduled' },
+      };
+    }
+
+    return {
+      responseText: 'Si deseas continuar, escribe: confirmar cita. Si quieres cambiar datos escribe: cambiar modalidad, cambiar dia o cambiar hora.',
+      patch: { intent: 'consulta_laboral', step: 'confirm_appointment', profile },
+      payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'confirm_waiting' },
+    };
+  }
 
   if (state.stage === 'awaiting_category') {
     if (isLaboralSelection(input.text)) {
@@ -278,15 +786,48 @@ async function runStatefulFlow(input: {
   }
 
   if (state.category === 'laboral' && state.stage === 'awaiting_question') {
+    if (isScheduleAppointmentRequest(input.text)) {
+      conversationStore.set(key, {
+        stage: 'awaiting_appointment_mode',
+        category: 'laboral',
+        profile,
+      });
+      return {
+        responseText: APPOINTMENT_MODE_TEXT,
+        patch: { intent: 'consulta_laboral', step: 'ask_appointment_mode', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'direct_start' },
+      };
+    }
+
+    if (isNoMoreDoubtsMessage(input.text)) {
+      conversationStore.set(key, {
+        stage: 'awaiting_appointment_opt',
+        category: 'laboral',
+        profile,
+      });
+      return {
+        responseText: `Perfecto. ${APPOINTMENT_OFFER_TEXT}`,
+        patch: { intent: 'consulta_laboral', step: 'offer_appointment', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', closureHint: true, appointmentFlow: 'offer' },
+      };
+    }
+
+    if (isAnotherQuestionPrompt(input.text)) {
+      return {
+        responseText: `Claro, cuéntame tu otra duda y te ayudo. ${FOLLOWUP_HINT_TEXT}`,
+        patch: { intent: 'consulta_laboral', step: 'ask_issue', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', awaitingNewQuestion: true },
+      };
+    }
+
     if (!env.ORCH_RAG_ENABLED) {
       return {
         responseText: 'El modo de consulta jurídica está desactivado temporalmente. Intenta en unos minutos.',
-        patch: { intent: 'consulta_laboral', step: 'ask_issue', profile: state.profile ?? {} },
+        patch: { intent: 'consulta_laboral', step: 'ask_issue', profile },
         payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', ragEnabled: false },
       };
     }
 
-    const profile = (state.profile ?? {}) as Record<string, unknown>;
     const previousQuery = typeof profile.lastLaboralQuery === 'string' ? profile.lastLaboralQuery : '';
     const previousNoSupport = profile.lastRagNoSupport === true;
     const currentText = input.rawText.trim();
@@ -557,15 +1098,37 @@ function shouldUseRag(intent: Intent, text: string): boolean {
   return text.trim().length > 0;
 }
 
-function isRagNoSupport(result: RagAnswerResult): boolean {
-  if (result.status === 'low_confidence' || result.status === 'no_context') return true;
+function normalizeAnswer(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
 
-  const answer = result.answer.trim().toLowerCase();
-  if (answer.includes('no encontre suficiente soporte')) return true;
-  if (answer.includes('no tengo suficiente informacion en el documento')) return true;
-  if (answer.includes('no tengo suficiente información en el documento')) return true;
-  if (answer.includes('no encontré suficiente soporte')) return true;
-  return result.citations.length === 0 && result.usedChunks.length === 0;
+function pickRagFallbackKind(result: RagAnswerResult): RagFallbackKind {
+  const normalizedAnswer = normalizeAnswer(result.answer);
+  const noInfoAnswer = normalizedAnswer.includes('no tengo suficiente informacion en el documento')
+    || normalizedAnswer.includes('no encontre suficiente soporte');
+
+  if (result.status === 'no_context') return 'no_content';
+
+  if (result.status === 'low_confidence') {
+    if (typeof result.confidenceScore === 'number' && result.confidenceScore < 0.35) {
+      return 'no_content';
+    }
+    if (noInfoAnswer && typeof result.bestScore === 'number' && result.bestScore < 0.5) {
+      return 'no_content';
+    }
+    return 'needs_context';
+  }
+
+  if (noInfoAnswer) {
+    if (typeof result.bestScore === 'number' && result.bestScore < 0.5) return 'no_content';
+    return 'needs_context';
+  }
+
+  return 'none';
 }
 
 function truncateForWhatsapp(text: string, max = 1300): string {
@@ -573,20 +1136,17 @@ function truncateForWhatsapp(text: string, max = 1300): string {
   return `${text.slice(0, max - 1)}…`;
 }
 
-function buildSourcesSection(result: RagAnswerResult): string {
-  if (!result.citations.length) return '';
-  const list = result.citations.slice(0, 3).map((citation, idx) => {
-    const source = citation.source ?? 'doc';
-    const chunk = typeof citation.chunkIndex === 'number' ? citation.chunkIndex : 0;
-    return `(${idx + 1}) ${source} frag ${chunk}`;
-  });
-  return `\n\nFuentes: ${list.join(' | ')}`;
+function sanitizeRagAnswerForUser(answer: string): string {
+  const withoutChunkRefs = answer
+    .replace(/\(\s*source\s*:\s*\d+\s*\)/gi, '')
+    .replace(/\(\s*[a-z0-9_\- ]{2,60}\s*:\s*\d+\s*\)/gi, '');
+  const withoutSourcesFooter = withoutChunkRefs.replace(/\n\nFuentes:[\s\S]*$/i, '');
+  return withoutSourcesFooter.replace(/\s{2,}/g, ' ').trim();
 }
 
 function buildRagWhatsappText(result: RagAnswerResult): string {
-  const base = truncateForWhatsapp(result.answer.trim());
-  const sources = buildSourcesSection(result);
-  return truncateForWhatsapp(`${base}${sources}`);
+  const base = sanitizeRagAnswerForUser(result.answer.trim());
+  return truncateForWhatsapp(`${base}\n\n${FOLLOWUP_HINT_TEXT}`);
 }
 
 export const orchestratorService = {
@@ -685,8 +1245,13 @@ export const orchestratorService = {
 
         try {
           const ragResult = await askRag(query, correlationId);
-          const isNoSupport = isRagNoSupport(ragResult);
-          responseText = isNoSupport ? RAG_NO_SUPPORT_FALLBACK : buildRagWhatsappText(ragResult);
+          const fallbackKind = pickRagFallbackKind(ragResult);
+          const isNoSupport = fallbackKind !== 'none';
+          responseText = fallbackKind === 'none'
+            ? buildRagWhatsappText(ragResult)
+            : fallbackKind === 'no_content'
+              ? RAG_NO_CONTENT_FALLBACK
+              : RAG_NEEDS_CONTEXT_FALLBACK;
           responsePayload = {
             ...responsePayload,
             rag: {
@@ -696,6 +1261,7 @@ export const orchestratorService = {
               usedChunksCount: ragResult.usedChunks.length,
               topChunk: ragResult.usedChunks[0]?.chunkIndex ?? null,
               noSupport: isNoSupport,
+              noSupportKind: fallbackKind,
             },
           };
 

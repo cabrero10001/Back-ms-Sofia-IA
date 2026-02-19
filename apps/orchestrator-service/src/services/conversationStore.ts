@@ -1,4 +1,12 @@
-export type FlowStage = 'awaiting_category' | 'awaiting_question' | 'support';
+export type FlowStage =
+  | 'awaiting_category'
+  | 'awaiting_question'
+  | 'support'
+  | 'awaiting_appointment_opt'
+  | 'awaiting_appointment_mode'
+  | 'awaiting_appointment_day'
+  | 'awaiting_appointment_time'
+  | 'awaiting_appointment_confirm';
 export type FlowCategory = 'laboral' | 'soporte';
 
 export interface ConversationState {
