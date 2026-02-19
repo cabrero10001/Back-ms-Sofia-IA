@@ -25,6 +25,12 @@ type Step =
   | 'ready_for_handoff'
   | 'ask_issue'
   | 'offer_appointment'
+  | 'ask_user_full_name'
+  | 'ask_user_doc_type'
+  | 'ask_user_doc_number'
+  | 'ask_user_email'
+  | 'ask_user_phone_confirm'
+  | 'ask_user_phone'
   | 'ask_appointment_mode'
   | 'ask_appointment_day'
   | 'ask_appointment_time'
@@ -55,8 +61,14 @@ const APPOINTMENT_OFFER_TEXT =
 const APPOINTMENT_MODE_TEXT =
   'Perfecto. Elige la modalidad de la cita: presencial o virtual.';
 
+const APPOINTMENT_USER_DATA_START_TEXT =
+  'Perfecto, antes de agendar la cita necesito tus datos. Indica tu nombre completo.';
+
+const APPOINTMENT_DOC_TYPE_TEXT =
+  'Gracias. Ahora indica tu tipo de documento (CC, CE, TI, PASAPORTE o PPT).';
+
 const FOLLOWUP_HINT_TEXT =
-  'Si tienes otra duda escribe reset. Si deseas terminar la conversación, escribe salir.';
+  'Si tienes otra duda escribe reset. Si deseas agendar una cita escribe: si, deseo agendar una cita. Si deseas terminar la conversación, escribe salir.';
 
 const GOODBYE_TEXT =
   '¡Con gusto! Me alegra haberte ayudado. Si quieres volver luego, escribe reset. ¡Hasta pronto!';
@@ -64,7 +76,7 @@ const GOODBYE_TEXT =
 const RAG_ERROR_FALLBACK =
   'En este momento no pude consultar la base jurídica. Por favor cuéntame más contexto y lo intento de nuevo.';
 
-const MENU_TEXT = 'Hola 👋 ¿En qué te ayudo hoy?\n1) Laboral\n2) Soporte';
+const MENU_TEXT = 'Hola 👋 ¿En qué te ayudo hoy?\n1) Laboral\n2) Soporte\n3) Agendar cita';
 
 function mapChannel(channel: MessageIn['channel']): ConversationChannel {
   return channel === 'whatsapp' ? 'WHATSAPP' : 'WEBCHAT';
@@ -322,12 +334,171 @@ function isAppointmentChangeHourCommand(text: string): boolean {
   return normalized.includes('cambiar hora') || normalized === 'hora';
 }
 
+function isAppointmentChangeFullNameCommand(text: string): boolean {
+  const normalized = normalizeForMatch(text);
+  return normalized.includes('cambiar nombre') || normalized === 'nombre';
+}
+
+function isAppointmentChangeDocTypeCommand(text: string): boolean {
+  const normalized = normalizeForMatch(text);
+  return normalized.includes('cambiar tipo de documento')
+    || normalized.includes('cambiar tipo documento')
+    || normalized === 'tipo de documento'
+    || normalized === 'tipo documento';
+}
+
+function isAppointmentChangeDocNumberCommand(text: string): boolean {
+  const normalized = normalizeForMatch(text);
+  return normalized.includes('cambiar numero de documento')
+    || normalized.includes('cambiar número de documento')
+    || normalized.includes('cambiar documento')
+    || normalized === 'numero de documento'
+    || normalized === 'número de documento'
+    || normalized === 'documento';
+}
+
+function isAppointmentChangeEmailCommand(text: string): boolean {
+  const normalized = normalizeForMatch(text);
+  return normalized.includes('cambiar correo') || normalized.includes('cambiar email') || normalized === 'correo' || normalized === 'email';
+}
+
+function isAppointmentChangePhoneCommand(text: string): boolean {
+  const normalized = normalizeForMatch(text);
+  return normalized.includes('cambiar numero')
+    || normalized.includes('cambiar número')
+    || normalized.includes('cambiar telefono')
+    || normalized.includes('cambiar teléfono')
+    || normalized === 'numero'
+    || normalized === 'número'
+    || normalized === 'telefono'
+    || normalized === 'teléfono';
+}
+
+type DocumentType = 'CC' | 'CE' | 'TI' | 'PASAPORTE' | 'PPT';
+
+function pickDocumentType(text: string): DocumentType | undefined {
+  const normalized = normalizeForMatch(text);
+  if (normalized === 'cc' || normalized.includes('cedula de ciudadania') || normalized.includes('cedula ciudadania')) {
+    return 'CC';
+  }
+  if (normalized === 'ce' || normalized.includes('cedula de extranjeria') || normalized.includes('cedula extranjeria')) {
+    return 'CE';
+  }
+  if (normalized === 'ti' || normalized.includes('tarjeta de identidad')) {
+    return 'TI';
+  }
+  if (normalized.includes('pasaporte')) {
+    return 'PASAPORTE';
+  }
+  if (normalized === 'ppt' || normalized.includes('permiso por proteccion temporal') || normalized.includes('permiso por proteccion')) {
+    return 'PPT';
+  }
+  return undefined;
+}
+
+function pickDocumentNumber(text: string): string | undefined {
+  const compact = text.trim().replace(/\s+/g, '');
+  if (!/^[a-zA-Z0-9.-]{5,20}$/.test(compact)) return undefined;
+  return compact;
+}
+
+function pickEmail(text: string): string | undefined {
+  const value = text.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return undefined;
+  return value;
+}
+
+function pickPhone(text: string): string | undefined {
+  const digits = text.replace(/\D/g, '');
+  if (digits.length < 7 || digits.length > 15) return undefined;
+  return digits;
+}
+
+function pickPhoneFromExternalUserId(externalUserId: string): string | undefined {
+  const digits = externalUserId.replace(/\D/g, '');
+  if (digits.length < 7 || digits.length > 15) return undefined;
+  return digits;
+}
+
+function pickFullName(text: string): string | undefined {
+  const value = text.trim().replace(/\s{2,}/g, ' ');
+  if (value.length < 6) return undefined;
+  const words = value.split(' ');
+  if (words.length < 2) return undefined;
+  return value;
+}
+
+type AppointmentUserData = {
+  fullName: string;
+  documentType: DocumentType;
+  documentNumber: string;
+  email: string;
+  phone: string;
+};
+
+type AppointmentScheduleData = {
+  mode: 'virtual' | 'presencial';
+  day: 'lunes' | 'martes' | 'miercoles' | 'jueves' | 'viernes';
+  hour24: number;
+};
+
+function pickAppointmentUserData(profile: Record<string, unknown>): AppointmentUserData | undefined {
+  const userData = typeof profile.appointmentUser === 'object' && profile.appointmentUser !== null
+    ? (profile.appointmentUser as Record<string, unknown>)
+    : undefined;
+  if (!userData) return undefined;
+
+  const fullName = typeof userData.fullName === 'string' ? userData.fullName : undefined;
+  const documentType = typeof userData.documentType === 'string' ? userData.documentType as DocumentType : undefined;
+  const documentNumber = typeof userData.documentNumber === 'string' ? userData.documentNumber : undefined;
+  const email = typeof userData.email === 'string' ? userData.email : undefined;
+  const phone = typeof userData.phone === 'string' ? userData.phone : undefined;
+
+  if (!fullName || !documentType || !documentNumber || !email || !phone) return undefined;
+  return { fullName, documentType, documentNumber, email, phone };
+}
+
+function pickAppointmentScheduleData(profile: Record<string, unknown>): AppointmentScheduleData | undefined {
+  const appointment = (typeof profile.appointment === 'object' && profile.appointment !== null)
+    ? (profile.appointment as Record<string, unknown>)
+    : undefined;
+  if (!appointment) return undefined;
+
+  const mode = appointment.mode === 'virtual' || appointment.mode === 'presencial'
+    ? appointment.mode
+    : undefined;
+  const day = pickWeekday(String(appointment.day ?? ''));
+  const hour24 = typeof appointment.hour24 === 'number' ? appointment.hour24 : undefined;
+
+  if (!mode || !day || hour24 === undefined || !isHourAllowedByMode(mode, hour24)) return undefined;
+  return { mode, day, hour24 };
+}
+
+function shouldReturnToConfirm(profile: Record<string, unknown>): boolean {
+  return profile.appointmentReturnToConfirm === true;
+}
+
+function clearReturnToConfirmFlag(profile: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...profile,
+    appointmentReturnToConfirm: undefined,
+  };
+}
+
+function buildAppointmentConfirmationText(userData: AppointmentUserData, schedule: AppointmentScheduleData): string {
+  return `Confírmame estos datos de tu cita:\n- Nombre completo: ${userData.fullName}\n- Tipo de documento: ${userData.documentType}\n- Número de documento: ${userData.documentNumber}\n- Correo: ${userData.email}\n- Número: ${userData.phone}\n- Modalidad: ${schedule.mode}\n- Día: ${formatWeekday(schedule.day)}\n- Hora: ${formatHour(schedule.hour24)}\n\nSi deseas cambiar un dato escribe: cambiar nombre, cambiar tipo de documento, cambiar numero de documento, cambiar correo, cambiar numero, cambiar modalidad, cambiar dia o cambiar hora.\nSi todo está correcto escribe: confirmar cita.`;
+}
+
 function isLaboralSelection(text: string): boolean {
   return text === '1' || text.includes('laboral') || text.includes('jurid') || text.includes('trabajo');
 }
 
 function isSoporteSelection(text: string): boolean {
   return text === '2' || text.includes('soporte') || text.includes('problema') || text.includes('error');
+}
+
+function isAppointmentSelection(text: string): boolean {
+  return text === '3' || text.includes('agendar cita') || text.includes('agendamiento') || text.includes('cita');
 }
 
 function defaultState(): Omit<ConversationState, 'updatedAt' | 'expiresAt'> {
@@ -467,18 +638,21 @@ async function runStatefulFlow(input: {
   const appointment = (typeof profile.appointment === 'object' && profile.appointment !== null)
     ? (profile.appointment as Record<string, unknown>)
     : {};
+  const appointmentUser = (typeof profile.appointmentUser === 'object' && profile.appointmentUser !== null)
+    ? (profile.appointmentUser as Record<string, unknown>)
+    : {};
 
   if (state.category === 'laboral' && state.stage === 'awaiting_appointment_opt') {
     if (isScheduleAppointmentRequest(input.text) || isPositiveReply(input.text)) {
       conversationStore.set(key, {
-        stage: 'awaiting_appointment_mode',
+        stage: 'awaiting_user_full_name',
         category: 'laboral',
         profile,
       });
       return {
-        responseText: APPOINTMENT_MODE_TEXT,
-        patch: { intent: 'consulta_laboral', step: 'ask_appointment_mode', profile },
-        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'mode' },
+        responseText: APPOINTMENT_USER_DATA_START_TEXT,
+        patch: { intent: 'consulta_laboral', step: 'ask_user_full_name', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'collect_user_full_name' },
       };
     }
 
@@ -512,7 +686,361 @@ async function runStatefulFlow(input: {
     };
   }
 
+  if (state.category === 'laboral' && state.stage === 'awaiting_user_full_name') {
+    const fullName = pickFullName(input.rawText);
+    if (!fullName) {
+      return {
+        responseText: 'Por favor indícame tu nombre completo (nombre y apellido).',
+        patch: { intent: 'consulta_laboral', step: 'ask_user_full_name', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'user_full_name_invalid' },
+      };
+    }
+
+    const nextProfile = {
+      ...profile,
+      appointmentUser: {
+        ...(typeof profile.appointmentUser === 'object' && profile.appointmentUser !== null ? profile.appointmentUser as Record<string, unknown> : {}),
+        fullName,
+      },
+    };
+
+    if (shouldReturnToConfirm(profile)) {
+      const userData = pickAppointmentUserData(nextProfile);
+      const schedule = pickAppointmentScheduleData(nextProfile);
+      if (userData && schedule) {
+        const finalProfile = clearReturnToConfirmFlag(nextProfile);
+        conversationStore.set(key, {
+          stage: 'awaiting_appointment_confirm',
+          category: 'laboral',
+          profile: finalProfile,
+        });
+        return {
+          responseText: buildAppointmentConfirmationText(userData, schedule),
+          patch: { intent: 'consulta_laboral', step: 'confirm_appointment', profile: finalProfile },
+          payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'confirm_after_change' },
+        };
+      }
+    }
+
+    conversationStore.set(key, {
+      stage: 'awaiting_user_doc_type',
+      category: 'laboral',
+      profile: nextProfile,
+    });
+
+    return {
+      responseText: APPOINTMENT_DOC_TYPE_TEXT,
+      patch: { intent: 'consulta_laboral', step: 'ask_user_doc_type', profile: nextProfile },
+      payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'collect_user_doc_type' },
+    };
+  }
+
+  if (state.category === 'laboral' && state.stage === 'awaiting_user_doc_type') {
+    const documentType = pickDocumentType(input.text);
+    if (!documentType) {
+      return {
+        responseText: 'No entendí el tipo de documento. Responde con una opción: CC, CE, TI, PASAPORTE o PPT.',
+        patch: { intent: 'consulta_laboral', step: 'ask_user_doc_type', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'user_doc_type_invalid' },
+      };
+    }
+
+    const nextProfile = {
+      ...profile,
+      appointmentUser: {
+        ...(typeof profile.appointmentUser === 'object' && profile.appointmentUser !== null ? profile.appointmentUser as Record<string, unknown> : {}),
+        documentType,
+      },
+    };
+
+    if (shouldReturnToConfirm(profile)) {
+      const userData = pickAppointmentUserData(nextProfile);
+      const schedule = pickAppointmentScheduleData(nextProfile);
+      if (userData && schedule) {
+        const finalProfile = clearReturnToConfirmFlag(nextProfile);
+        conversationStore.set(key, {
+          stage: 'awaiting_appointment_confirm',
+          category: 'laboral',
+          profile: finalProfile,
+        });
+        return {
+          responseText: buildAppointmentConfirmationText(userData, schedule),
+          patch: { intent: 'consulta_laboral', step: 'confirm_appointment', profile: finalProfile },
+          payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'confirm_after_change' },
+        };
+      }
+    }
+
+    conversationStore.set(key, {
+      stage: 'awaiting_user_doc_number',
+      category: 'laboral',
+      profile: nextProfile,
+    });
+
+    return {
+      responseText: 'Perfecto. Ahora escribe tu número de documento.',
+      patch: { intent: 'consulta_laboral', step: 'ask_user_doc_number', profile: nextProfile },
+      payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'collect_user_doc_number' },
+    };
+  }
+
+  if (state.category === 'laboral' && state.stage === 'awaiting_user_doc_number') {
+    const documentNumber = pickDocumentNumber(input.rawText);
+    if (!documentNumber) {
+      return {
+        responseText: 'El número de documento no es válido. Inténtalo de nuevo (solo letras, números, punto o guion).',
+        patch: { intent: 'consulta_laboral', step: 'ask_user_doc_number', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'user_doc_number_invalid' },
+      };
+    }
+
+    const nextProfile = {
+      ...profile,
+      appointmentUser: {
+        ...(typeof profile.appointmentUser === 'object' && profile.appointmentUser !== null ? profile.appointmentUser as Record<string, unknown> : {}),
+        documentNumber,
+      },
+    };
+
+    if (shouldReturnToConfirm(profile)) {
+      const userData = pickAppointmentUserData(nextProfile);
+      const schedule = pickAppointmentScheduleData(nextProfile);
+      if (userData && schedule) {
+        const finalProfile = clearReturnToConfirmFlag(nextProfile);
+        conversationStore.set(key, {
+          stage: 'awaiting_appointment_confirm',
+          category: 'laboral',
+          profile: finalProfile,
+        });
+        return {
+          responseText: buildAppointmentConfirmationText(userData, schedule),
+          patch: { intent: 'consulta_laboral', step: 'confirm_appointment', profile: finalProfile },
+          payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'confirm_after_change' },
+        };
+      }
+    }
+
+    conversationStore.set(key, {
+      stage: 'awaiting_user_email',
+      category: 'laboral',
+      profile: nextProfile,
+    });
+
+    return {
+      responseText: 'Gracias. Ahora escribe tu correo electrónico.',
+      patch: { intent: 'consulta_laboral', step: 'ask_user_email', profile: nextProfile },
+      payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'collect_user_email' },
+    };
+  }
+
+  if (state.category === 'laboral' && state.stage === 'awaiting_user_email') {
+    const email = pickEmail(input.rawText);
+    if (!email) {
+      return {
+        responseText: 'El correo no es válido. Escríbelo de nuevo (ejemplo: nombre@dominio.com).',
+        patch: { intent: 'consulta_laboral', step: 'ask_user_email', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'user_email_invalid' },
+      };
+    }
+
+    const nextProfile = {
+      ...profile,
+      appointmentUser: {
+        ...(typeof profile.appointmentUser === 'object' && profile.appointmentUser !== null ? profile.appointmentUser as Record<string, unknown> : {}),
+        email,
+      },
+    };
+
+    if (shouldReturnToConfirm(profile)) {
+      const userData = pickAppointmentUserData(nextProfile);
+      const schedule = pickAppointmentScheduleData(nextProfile);
+      if (userData && schedule) {
+        const finalProfile = clearReturnToConfirmFlag(nextProfile);
+        conversationStore.set(key, {
+          stage: 'awaiting_appointment_confirm',
+          category: 'laboral',
+          profile: finalProfile,
+        });
+        return {
+          responseText: buildAppointmentConfirmationText(userData, schedule),
+          patch: { intent: 'consulta_laboral', step: 'confirm_appointment', profile: finalProfile },
+          payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'confirm_after_change' },
+        };
+      }
+    }
+
+    const inferredPhone = pickPhoneFromExternalUserId(input.messageIn.externalUserId);
+    if (inferredPhone) {
+      const profileWithPhone = {
+        ...nextProfile,
+        appointmentUser: {
+          ...(nextProfile.appointmentUser as Record<string, unknown>),
+          phone: inferredPhone,
+        },
+      };
+
+      conversationStore.set(key, {
+        stage: 'awaiting_user_phone_confirm',
+        category: 'laboral',
+        profile: profileWithPhone,
+      });
+
+      return {
+        responseText: `Perfecto. ¿Deseas usar este número de contacto: ${inferredPhone}? Responde si o no. Si quieres cambiarlo, escribe el nuevo número.`,
+        patch: { intent: 'consulta_laboral', step: 'ask_user_phone_confirm', profile: profileWithPhone },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'collect_user_phone_confirm' },
+      };
+    }
+
+    conversationStore.set(key, {
+      stage: 'awaiting_user_phone',
+      category: 'laboral',
+      profile: nextProfile,
+    });
+
+    return {
+      responseText: 'Por último, indícame tu número de contacto.',
+      patch: { intent: 'consulta_laboral', step: 'ask_user_phone', profile: nextProfile },
+      payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'collect_user_phone' },
+    };
+  }
+
+  if (state.category === 'laboral' && state.stage === 'awaiting_user_phone_confirm') {
+    const currentPhone = typeof appointmentUser.phone === 'string'
+      ? String(appointmentUser.phone)
+      : undefined;
+    const providedPhone = pickPhone(input.rawText);
+
+    if (providedPhone) {
+      const nextProfile = {
+        ...profile,
+        appointmentUser: {
+          ...(typeof profile.appointmentUser === 'object' && profile.appointmentUser !== null ? profile.appointmentUser as Record<string, unknown> : {}),
+          phone: providedPhone,
+        },
+      };
+      conversationStore.set(key, {
+        stage: 'awaiting_appointment_mode',
+        category: 'laboral',
+        profile: nextProfile,
+      });
+      return {
+        responseText: `Perfecto. Guardé el número ${providedPhone}. ${APPOINTMENT_MODE_TEXT}`,
+        patch: { intent: 'consulta_laboral', step: 'ask_appointment_mode', profile: nextProfile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'collect_user_phone_changed' },
+      };
+    }
+
+    if (isPositiveReply(input.text)) {
+      if (!currentPhone) {
+        conversationStore.set(key, {
+          stage: 'awaiting_user_phone',
+          category: 'laboral',
+          profile,
+        });
+        return {
+          responseText: 'No pude leer tu número automáticamente. Por favor indícame tu número de contacto.',
+          patch: { intent: 'consulta_laboral', step: 'ask_user_phone', profile },
+          payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'user_phone_missing' },
+        };
+      }
+
+      conversationStore.set(key, {
+        stage: 'awaiting_appointment_mode',
+        category: 'laboral',
+        profile,
+      });
+      return {
+        responseText: APPOINTMENT_MODE_TEXT,
+        patch: { intent: 'consulta_laboral', step: 'ask_appointment_mode', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'mode' },
+      };
+    }
+
+    if (isNegativeReply(input.text) || isAppointmentChangePhoneCommand(input.text)) {
+      conversationStore.set(key, {
+        stage: 'awaiting_user_phone',
+        category: 'laboral',
+        profile,
+      });
+      return {
+        responseText: 'Entendido. Indícame el número de contacto que deseas usar.',
+        patch: { intent: 'consulta_laboral', step: 'ask_user_phone', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'collect_user_phone_manual' },
+      };
+    }
+
+    return {
+      responseText: 'Responde si o no para confirmar el número, o escribe directamente el nuevo número de contacto.',
+      patch: { intent: 'consulta_laboral', step: 'ask_user_phone_confirm', profile },
+      payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'user_phone_confirm_waiting' },
+    };
+  }
+
+  if (state.category === 'laboral' && state.stage === 'awaiting_user_phone') {
+    const phone = pickPhone(input.rawText);
+    if (!phone) {
+      return {
+        responseText: 'El número no es válido. Escríbelo nuevamente solo con números o con prefijo de país.',
+        patch: { intent: 'consulta_laboral', step: 'ask_user_phone', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'user_phone_invalid' },
+      };
+    }
+
+    const nextProfile = {
+      ...profile,
+      appointmentUser: {
+        ...(typeof profile.appointmentUser === 'object' && profile.appointmentUser !== null ? profile.appointmentUser as Record<string, unknown> : {}),
+        phone,
+      },
+    };
+
+    if (shouldReturnToConfirm(profile)) {
+      const userData = pickAppointmentUserData(nextProfile);
+      const schedule = pickAppointmentScheduleData(nextProfile);
+      if (userData && schedule) {
+        const finalProfile = clearReturnToConfirmFlag(nextProfile);
+        conversationStore.set(key, {
+          stage: 'awaiting_appointment_confirm',
+          category: 'laboral',
+          profile: finalProfile,
+        });
+        return {
+          responseText: buildAppointmentConfirmationText(userData, schedule),
+          patch: { intent: 'consulta_laboral', step: 'confirm_appointment', profile: finalProfile },
+          payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'confirm_after_change' },
+        };
+      }
+    }
+
+    conversationStore.set(key, {
+      stage: 'awaiting_appointment_mode',
+      category: 'laboral',
+      profile: nextProfile,
+    });
+
+    return {
+      responseText: APPOINTMENT_MODE_TEXT,
+      patch: { intent: 'consulta_laboral', step: 'ask_appointment_mode', profile: nextProfile },
+      payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'mode' },
+    };
+  }
+
   if (state.category === 'laboral' && state.stage === 'awaiting_appointment_mode') {
+    const userData = pickAppointmentUserData(profile);
+    if (!userData) {
+      conversationStore.set(key, {
+        stage: 'awaiting_user_full_name',
+        category: 'laboral',
+        profile,
+      });
+      return {
+        responseText: APPOINTMENT_USER_DATA_START_TEXT,
+        patch: { intent: 'consulta_laboral', step: 'ask_user_full_name', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'user_data_missing' },
+      };
+    }
+
     const mode = pickAppointmentMode(input.text);
     if (!mode) {
       return {
@@ -596,6 +1124,20 @@ async function runStatefulFlow(input: {
   }
 
   if (state.category === 'laboral' && state.stage === 'awaiting_appointment_time') {
+    const userData = pickAppointmentUserData(profile);
+    if (!userData) {
+      conversationStore.set(key, {
+        stage: 'awaiting_user_full_name',
+        category: 'laboral',
+        profile,
+      });
+      return {
+        responseText: APPOINTMENT_USER_DATA_START_TEXT,
+        patch: { intent: 'consulta_laboral', step: 'ask_user_full_name', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'user_data_missing' },
+      };
+    }
+
     const mode = appointment.mode === 'virtual' || appointment.mode === 'presencial'
       ? appointment.mode
       : undefined;
@@ -661,13 +1203,98 @@ async function runStatefulFlow(input: {
     });
 
     return {
-      responseText: `Confírmame estos datos de tu cita:\n- Modalidad: ${mode}\n- Día: ${formatWeekday(day)}\n- Hora: ${formatHour(hour24)}\n\nSi deseas cambiar un dato escribe: cambiar modalidad, cambiar dia o cambiar hora.\nSi todo está correcto escribe: confirmar cita.`,
+      responseText: `Confírmame estos datos de tu cita:\n- Nombre completo: ${userData.fullName}\n- Tipo de documento: ${userData.documentType}\n- Número de documento: ${userData.documentNumber}\n- Correo: ${userData.email}\n- Número: ${userData.phone}\n- Modalidad: ${mode}\n- Día: ${formatWeekday(day)}\n- Hora: ${formatHour(hour24)}\n\nSi deseas cambiar un dato escribe: cambiar nombre, cambiar tipo de documento, cambiar numero de documento, cambiar correo, cambiar numero, cambiar modalidad, cambiar dia o cambiar hora.\nSi todo está correcto escribe: confirmar cita.`,
       patch: { intent: 'consulta_laboral', step: 'confirm_appointment', profile: nextProfile },
       payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'confirm' },
     };
   }
 
   if (state.category === 'laboral' && state.stage === 'awaiting_appointment_confirm') {
+    if (isAppointmentChangeFullNameCommand(input.text)) {
+      const nextProfile = {
+        ...profile,
+        appointmentReturnToConfirm: true,
+      };
+      conversationStore.set(key, {
+        stage: 'awaiting_user_full_name',
+        category: 'laboral',
+        profile: nextProfile,
+      });
+      return {
+        responseText: 'Perfecto, indícame el nombre completo actualizado.',
+        patch: { intent: 'consulta_laboral', step: 'ask_user_full_name', profile: nextProfile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'change_user_full_name' },
+      };
+    }
+
+    if (isAppointmentChangeDocTypeCommand(input.text)) {
+      const nextProfile = {
+        ...profile,
+        appointmentReturnToConfirm: true,
+      };
+      conversationStore.set(key, {
+        stage: 'awaiting_user_doc_type',
+        category: 'laboral',
+        profile: nextProfile,
+      });
+      return {
+        responseText: APPOINTMENT_DOC_TYPE_TEXT,
+        patch: { intent: 'consulta_laboral', step: 'ask_user_doc_type', profile: nextProfile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'change_user_doc_type' },
+      };
+    }
+
+    if (isAppointmentChangeDocNumberCommand(input.text)) {
+      const nextProfile = {
+        ...profile,
+        appointmentReturnToConfirm: true,
+      };
+      conversationStore.set(key, {
+        stage: 'awaiting_user_doc_number',
+        category: 'laboral',
+        profile: nextProfile,
+      });
+      return {
+        responseText: 'Perfecto, escribe el nuevo número de documento.',
+        patch: { intent: 'consulta_laboral', step: 'ask_user_doc_number', profile: nextProfile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'change_user_doc_number' },
+      };
+    }
+
+    if (isAppointmentChangeEmailCommand(input.text)) {
+      const nextProfile = {
+        ...profile,
+        appointmentReturnToConfirm: true,
+      };
+      conversationStore.set(key, {
+        stage: 'awaiting_user_email',
+        category: 'laboral',
+        profile: nextProfile,
+      });
+      return {
+        responseText: 'Perfecto, escribe el correo actualizado.',
+        patch: { intent: 'consulta_laboral', step: 'ask_user_email', profile: nextProfile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'change_user_email' },
+      };
+    }
+
+    if (isAppointmentChangePhoneCommand(input.text)) {
+      const nextProfile = {
+        ...profile,
+        appointmentReturnToConfirm: true,
+      };
+      conversationStore.set(key, {
+        stage: 'awaiting_user_phone',
+        category: 'laboral',
+        profile: nextProfile,
+      });
+      return {
+        responseText: 'Perfecto, indícame el número de contacto actualizado.',
+        patch: { intent: 'consulta_laboral', step: 'ask_user_phone', profile: nextProfile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'change_user_phone' },
+      };
+    }
+
     if (isAppointmentChangeModeCommand(input.text)) {
       conversationStore.set(key, {
         stage: 'awaiting_appointment_mode',
@@ -711,21 +1338,22 @@ async function runStatefulFlow(input: {
     }
 
     if (isAppointmentConfirmCommand(input.text)) {
+      const userData = pickAppointmentUserData(profile);
       const mode = appointment.mode === 'virtual' || appointment.mode === 'presencial'
         ? appointment.mode
         : undefined;
       const day = pickWeekday(String(appointment.day ?? ''));
       const hour24 = typeof appointment.hour24 === 'number' ? appointment.hour24 : undefined;
 
-      if (!mode || !day || hour24 === undefined || !isHourAllowedByMode(mode, hour24)) {
+      if (!userData || !mode || !day || hour24 === undefined || !isHourAllowedByMode(mode, hour24)) {
         conversationStore.set(key, {
-          stage: 'awaiting_appointment_mode',
+          stage: 'awaiting_user_full_name',
           category: 'laboral',
           profile,
         });
         return {
-          responseText: 'Falta completar algunos datos de la cita. Vamos de nuevo con la modalidad: presencial o virtual.',
-          patch: { intent: 'consulta_laboral', step: 'ask_appointment_mode', profile },
+          responseText: 'Falta completar algunos datos de contacto. Vamos de nuevo. Indica tu nombre completo.',
+          patch: { intent: 'consulta_laboral', step: 'ask_user_full_name', profile },
           payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'recollect' },
         };
       }
@@ -733,6 +1361,7 @@ async function runStatefulFlow(input: {
       const nextProfile = {
         ...profile,
         lastAppointment: {
+          user: userData,
           mode,
           day,
           hour24,
@@ -753,7 +1382,7 @@ async function runStatefulFlow(input: {
     }
 
     return {
-      responseText: 'Si deseas continuar, escribe: confirmar cita. Si quieres cambiar datos escribe: cambiar modalidad, cambiar dia o cambiar hora.',
+      responseText: 'Si deseas continuar, escribe: confirmar cita. Si quieres cambiar datos escribe: cambiar nombre, cambiar tipo de documento, cambiar numero de documento, cambiar correo, cambiar numero, cambiar modalidad, cambiar dia o cambiar hora.',
       patch: { intent: 'consulta_laboral', step: 'confirm_appointment', profile },
       payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'confirm_waiting' },
     };
@@ -763,9 +1392,24 @@ async function runStatefulFlow(input: {
     if (isLaboralSelection(input.text)) {
       conversationStore.set(key, { stage: 'awaiting_question', category: 'laboral', profile: state.profile ?? {} });
       return {
-        responseText: 'Perfecto. Escribe tu consulta laboral y te respondo con base en el documento.',
+        responseText: 'Perfecto. Escribe tu consulta laboral.',
         patch: { intent: 'consulta_laboral', step: 'ask_issue', profile: state.profile ?? {} },
         payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', category: 'laboral' },
+      };
+    }
+
+    if (isAppointmentSelection(input.text)) {
+      conversationStore.set(key, { stage: 'awaiting_user_full_name', category: 'laboral', profile: state.profile ?? {} });
+      return {
+        responseText: APPOINTMENT_USER_DATA_START_TEXT,
+        patch: { intent: 'consulta_laboral', step: 'ask_user_full_name', profile: state.profile ?? {} },
+        payload: {
+          orchestrator: true,
+          correlationId: input.correlationId,
+          flow: 'stateful',
+          category: 'laboral',
+          appointmentFlow: 'menu_direct_start',
+        },
       };
     }
 
@@ -788,14 +1432,14 @@ async function runStatefulFlow(input: {
   if (state.category === 'laboral' && state.stage === 'awaiting_question') {
     if (isScheduleAppointmentRequest(input.text)) {
       conversationStore.set(key, {
-        stage: 'awaiting_appointment_mode',
+        stage: 'awaiting_user_full_name',
         category: 'laboral',
         profile,
       });
       return {
-        responseText: APPOINTMENT_MODE_TEXT,
-        patch: { intent: 'consulta_laboral', step: 'ask_appointment_mode', profile },
-        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'direct_start' },
+        responseText: APPOINTMENT_USER_DATA_START_TEXT,
+        patch: { intent: 'consulta_laboral', step: 'ask_user_full_name', profile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'direct_start_collect_user' },
       };
     }
 
@@ -1111,20 +1755,16 @@ function pickRagFallbackKind(result: RagAnswerResult): RagFallbackKind {
   const noInfoAnswer = normalizedAnswer.includes('no tengo suficiente informacion en el documento')
     || normalizedAnswer.includes('no encontre suficiente soporte');
 
-  if (result.status === 'no_context') return 'no_content';
+  if (result.status === 'no_context' && result.citations.length === 0 && result.usedChunks.length === 0) {
+    return 'no_content';
+  }
 
   if (result.status === 'low_confidence') {
-    if (typeof result.confidenceScore === 'number' && result.confidenceScore < 0.35) {
-      return 'no_content';
-    }
-    if (noInfoAnswer && typeof result.bestScore === 'number' && result.bestScore < 0.5) {
-      return 'no_content';
-    }
     return 'needs_context';
   }
 
   if (noInfoAnswer) {
-    if (typeof result.bestScore === 'number' && result.bestScore < 0.5) return 'no_content';
+    if (result.citations.length === 0 && result.usedChunks.length === 0) return 'no_content';
     return 'needs_context';
   }
 

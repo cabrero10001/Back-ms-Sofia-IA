@@ -48,14 +48,15 @@ def retrieve_candidates(
             ]
         )
 
-    docs = client.search(
+    response = client.query_points(
         collection_name=collection_name,
-        query_vector=query_embedding,
+        query=query_embedding,
         query_filter=qdrant_filter,
         limit=topk,
         with_payload=True,
         with_vectors=include_embedding,
     )
+    docs = list(response.points or [])
 
     candidates: list[ChunkCandidate] = []
     for doc in docs:
