@@ -8,6 +8,8 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "@builderbot/bot": "^1.2.8",
+    "@builderbot/provider-baileys": "^1.2.8",
     "dotenv": "^16.4.7",
     "express": "^4.21.0",
     "zod": "^3.24.0"
