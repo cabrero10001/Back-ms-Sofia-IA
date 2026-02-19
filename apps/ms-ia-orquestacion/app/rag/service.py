@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from openai import OpenAI
-from pymongo.collection import Collection
+from qdrant_client import QdrantClient
 
 from app.core.config import get_settings
 from app.core.logger import get_logger
@@ -63,8 +63,9 @@ def _build_retrieval_filters(
 
 
 class RetrievalPipelineService:
-    def __init__(self, collection: Collection, openai_client: OpenAI, embedding_model: str, answer_model: str) -> None:
-        self.collection = collection
+    def __init__(self, qdrant_client: QdrantClient, qdrant_collection: str, openai_client: OpenAI, embedding_model: str, answer_model: str) -> None:
+        self.qdrant_client = qdrant_client
+        self.qdrant_collection = qdrant_collection
         self.openai_client = openai_client
         self.embedding_model = embedding_model
         self.answer_model = answer_model
@@ -146,12 +147,12 @@ class RetrievalPipelineService:
 
         include_embedding = run_config.rerank_enabled and run_config.rerank_mode == "cosine"
         candidates = retrieve_candidates(
-            collection=self.collection,
+            client=self.qdrant_client,
+            collection_name=self.qdrant_collection,
             query_embedding=query_embedding,
             topk=run_config.candidate_topk,
             filters=filters,
             include_embedding=include_embedding,
-            vector_index_name=settings.mongodb_vector_index,
         )
         retrieval_ms = round((time.perf_counter() - retrieval_started) * 1000, 2)
 

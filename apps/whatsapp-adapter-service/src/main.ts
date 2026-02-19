@@ -1,13 +1,6 @@
+import crypto from 'crypto';
 import express from 'express';
 import { config } from 'dotenv';
-import {
-  addKeyword,
-  createBot,
-  createFlow,
-  createProvider,
-  EVENTS,
-  MemoryDB,
-} from '@builderbot/bot';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 
@@ -18,22 +11,15 @@ const EnvSchema = z.object({
   ORCHESTRATOR_URL: z.string().url().default('http://localhost:3022/v1/orchestrator/handle-message'),
   TENANT_ID: z.string().min(1),
   CHANNEL: z.enum(['WHATSAPP']).default('WHATSAPP'),
-  PHONE_NUMBER: z.string().min(7),
-  BAILEYS_USE_PAIRING_CODE: z.coerce.boolean().default(true),
-  BAILEYS_SESSION_PATH: z.string().min(1).default('./.sessions'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  META_VERIFY_TOKEN: z.string().min(1),
+  META_GRAPH_VERSION: z.string().min(1).default('v21.0'),
+  META_PHONE_NUMBER_ID: z.string().min(1),
+  META_ACCESS_TOKEN: z.string().min(1),
+  META_APP_SECRET: z.string().optional(),
 });
 
 const env = EnvSchema.parse(process.env);
-
-let lastPairingCode: string | null = null;
-let lastPairingAt: string | null = null;
-let lastPairingError: string | null = null;
-let isWhatsAppReady = false;
-let pairingRequestInFlight = false;
-let currentVendor: any = null;
-const PAIRING_CODE_CACHE_MS = 55_000;
-const PAIRING_RETRY_DELAYS_MS = [2_000, 5_000, 10_000];
 
 type OrchestratorMessageOut = {
   type?: string;
@@ -42,8 +28,6 @@ type OrchestratorMessageOut = {
 };
 
 type OrchestratorPayload = {
-  conversationId?: string;
-  contactId?: string;
   correlationId?: string;
   responses?: OrchestratorMessageOut[];
   replyText?: string;
@@ -51,119 +35,34 @@ type OrchestratorPayload = {
   response?: string;
 };
 
+type IncomingMessage = {
+  from: string;
+  text: string;
+  providerMessageId: string;
+  pushName?: string;
+};
+
 const processedMessageIds = new Map<string, number>();
 const DEDUPE_TTL_MS = 60_000;
 
 function log(level: 'debug' | 'info' | 'warn' | 'error', message: string, meta?: Record<string, unknown>): void {
-  const priorities: Record<typeof env.LOG_LEVEL, number> = {
-    debug: 10,
-    info: 20,
-    warn: 30,
-    error: 40,
-  };
+  const priorities: Record<typeof env.LOG_LEVEL, number> = { debug: 10, info: 20, warn: 30, error: 40 };
   if (priorities[level] < priorities[env.LOG_LEVEL]) return;
-
   const extra = meta ? ` ${JSON.stringify(meta)}` : '';
   const line = `[whatsapp-adapter] ${level.toUpperCase()} ${message}${extra}`;
   if (level === 'error') {
     console.error(line);
-    return;
-  }
-  console.log(line);
-}
-
-function sanitizePhoneNumber(phoneNumber: string): string {
-  return phoneNumber.replace(/\D/g, '');
-}
-
-function isVendorAuthenticated(vendor: any): boolean {
-  return Boolean(vendor?.user);
-}
-
-function extractErrorMessage(error: unknown): string {
-  if (!error) return 'unknown_error';
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-
-  const maybeObj = error as {
-    message?: unknown;
-    output?: { statusCode?: unknown; payload?: { message?: unknown } };
-    data?: { reason?: unknown };
-  };
-
-  const message = maybeObj.message ?? maybeObj.output?.payload?.message ?? maybeObj.data?.reason;
-  const statusCode = maybeObj.output?.statusCode;
-
-  if (typeof message === 'string' && message.trim().length > 0) {
-    return typeof statusCode === 'number' ? `${message} (status:${statusCode})` : message;
-  }
-
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
+  } else {
+    console.log(line);
   }
 }
 
-function logPairingCode(pairingCode: string): void {
-  console.log(`[whatsapp-adapter] PAIRING CODE: ${pairingCode}`);
+function normalizeExternalUserId(raw: string): string {
+  return raw.replace(/@s\.whatsapp\.net$/, '').trim();
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function hasRecentPairingCode(): boolean {
-  if (!lastPairingCode || !lastPairingAt) return false;
-  const issuedAtMs = new Date(lastPairingAt).getTime();
-  if (Number.isNaN(issuedAtMs)) return false;
-  return Date.now() - issuedAtMs <= PAIRING_CODE_CACHE_MS;
-}
-
-function extractPairingCodeFromRequireAction(payload: unknown): string | null {
-  const data = payload as {
-    payload?: { code?: unknown };
-    instructions?: unknown;
-  };
-
-  const directCode = data?.payload?.code;
-  if (typeof directCode === 'string' && directCode.trim().length > 0) {
-    return directCode.trim();
-  }
-
-  if (Array.isArray(data?.instructions)) {
-    const line = data.instructions.find((item) => typeof item === 'string' && item.toLowerCase().includes('pairing code'));
-    if (typeof line === 'string') {
-      const match = line.match(/([0-9A-Z-]{4,})/i);
-      if (match?.[1]) return match[1].trim();
-    }
-  }
-
-  return null;
-}
-
-function loadBaileysRuntime(): { BaileysProvider: any; baileys: any } {
-  const baileysModule = require('baileys');
-  let baileysRuntime = baileysModule;
-
-  if (typeof baileysModule !== 'function' && typeof baileysModule?.default === 'function') {
-    const compatBaileys = Object.assign(
-      (...args: unknown[]) => baileysModule.default(...args),
-      baileysModule,
-      { default: baileysModule.default }
-    );
-
-    const moduleId = require.resolve('baileys');
-    if (require.cache[moduleId]) {
-      require.cache[moduleId].exports = compatBaileys;
-    }
-
-    baileysRuntime = compatBaileys;
-    log('warn', 'baileys_cjs_esm_interop_patch_applied');
-  }
-
-  const { BaileysProvider } = require('@builderbot/provider-baileys');
-  return { BaileysProvider, baileys: baileysRuntime };
+function truncateText(text: string, max = 120): string {
+  return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
 function cleanupProcessedIds(now = Date.now()): void {
@@ -177,22 +76,10 @@ function cleanupProcessedIds(now = Date.now()): void {
 function isDuplicate(providerMessageId: string): boolean {
   const now = Date.now();
   cleanupProcessedIds(now);
-
   const previous = processedMessageIds.get(providerMessageId);
-  if (previous && now - previous <= DEDUPE_TTL_MS) {
-    return true;
-  }
-
+  if (previous && now - previous <= DEDUPE_TTL_MS) return true;
   processedMessageIds.set(providerMessageId, now);
   return false;
-}
-
-function normalizeExternalUserId(raw: string): string {
-  return raw.replace(/@s\.whatsapp\.net$/, '').trim();
-}
-
-function truncateText(text: string, max = 120): string {
-  return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
 function extractReplyText(payload: OrchestratorPayload): string {
@@ -200,12 +87,73 @@ function extractReplyText(payload: OrchestratorPayload): string {
     const firstText = payload.responses.find((msg) => typeof msg.text === 'string' && msg.text.trim().length > 0);
     if (firstText?.text) return firstText.text;
   }
-
   if (typeof payload.replyText === 'string' && payload.replyText.trim().length > 0) return payload.replyText;
   if (typeof payload.message === 'string' && payload.message.trim().length > 0) return payload.message;
   if (typeof payload.response === 'string' && payload.response.trim().length > 0) return payload.response;
-
   return 'En este momento no puedo procesar tu solicitud, intenta más tarde.';
+}
+
+function verifyMetaSignature(rawBody: Buffer, signatureHeader: string | undefined): boolean {
+  if (!env.META_APP_SECRET) return true;
+  if (!signatureHeader || !signatureHeader.startsWith('sha256=')) return false;
+  const expected = crypto.createHmac('sha256', env.META_APP_SECRET).update(rawBody).digest('hex');
+  const received = signatureHeader.replace('sha256=', '');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));
+  } catch {
+    return false;
+  }
+}
+
+function extractIncomingMessages(payload: any): IncomingMessage[] {
+  const entries = Array.isArray(payload?.entry) ? payload.entry : [];
+  const messages: IncomingMessage[] = [];
+
+  for (const entry of entries) {
+    const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+    for (const change of changes) {
+      const value = change?.value;
+      const incoming = Array.isArray(value?.messages) ? value.messages : [];
+      const contacts = Array.isArray(value?.contacts) ? value.contacts : [];
+      const namesByWaId = new Map<string, string>();
+      for (const contact of contacts) {
+        const waId = String(contact?.wa_id ?? '').trim();
+        const name = String(contact?.profile?.name ?? '').trim();
+        if (waId && name) namesByWaId.set(waId, name);
+      }
+
+      for (const msg of incoming) {
+        const from = String(msg?.from ?? '').trim();
+        const id = String(msg?.id ?? '').trim();
+        const type = String(msg?.type ?? '').trim();
+        if (!from || !id) continue;
+
+        let text = '';
+        if (type === 'text') {
+          text = String(msg?.text?.body ?? '').trim();
+        } else if (type === 'interactive') {
+          text = String(
+            msg?.interactive?.button_reply?.title
+            ?? msg?.interactive?.list_reply?.title
+            ?? msg?.interactive?.button_reply?.id
+            ?? msg?.interactive?.list_reply?.id
+            ?? ''
+          ).trim();
+        }
+
+        if (!text) continue;
+
+        messages.push({
+          from,
+          text,
+          providerMessageId: id,
+          pushName: namesByWaId.get(from),
+        });
+      }
+    }
+  }
+
+  return messages;
 }
 
 async function callOrchestrator(input: {
@@ -227,7 +175,7 @@ async function callOrchestrator(input: {
       type: 'text',
       text: input.body,
       providerMessageId: input.providerMessageId,
-      payload: { source: 'whatsapp-baileys' },
+      payload: { source: 'whatsapp-cloud-api' },
     },
   };
 
@@ -255,335 +203,153 @@ async function callOrchestrator(input: {
   }
 }
 
-async function bootstrap(): Promise<void> {
-  const sanitizedPhoneNumber = sanitizePhoneNumber(env.PHONE_NUMBER);
-  const { BaileysProvider, baileys } = loadBaileysRuntime();
-
-  let latestWaVersion: number[] | null = null;
-  if (typeof baileys?.fetchLatestBaileysVersion === 'function') {
-    try {
-      const latest = await baileys.fetchLatestBaileysVersion();
-      if (Array.isArray(latest?.version) && latest.version.length >= 3) {
-        const parsedVersion = latest.version.map((value: unknown) => Number(value)).slice(0, 3);
-        latestWaVersion = parsedVersion;
-        log('info', 'baileys_latest_version_loaded', { version: parsedVersion.join('.') });
-      }
-    } catch (error) {
-      log('warn', 'baileys_latest_version_load_failed', {
-        error: extractErrorMessage(error),
-      });
-    }
-  }
-
-  const adapterProvider = createProvider(BaileysProvider as any, {
-    // Keep provider-side pairing disabled to avoid its internal premature
-    // requestPairingCode call, and handle pairing from this service.
-    usePairingCode: false,
-    phoneNumber: sanitizedPhoneNumber,
-    sessionPath: env.BAILEYS_SESSION_PATH,
-    ...(latestWaVersion ? { version: latestWaVersion } : {}),
+async function sendWhatsappMessage(to: string, body: string, correlationId: string): Promise<void> {
+  const endpoint = `https://graph.facebook.com/${env.META_GRAPH_VERSION}/${env.META_PHONE_NUMBER_ID}/messages`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${env.META_ACCESS_TOKEN}`,
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'text',
+      text: {
+        preview_url: false,
+        body,
+      },
+    }),
   });
 
-  const ensurePairingCode = async (reason: string): Promise<string | null> => {
-    if (!env.BAILEYS_USE_PAIRING_CODE) return null;
-    if (isWhatsAppReady) return null;
-    if (hasRecentPairingCode()) return lastPairingCode;
-    if (pairingRequestInFlight) return lastPairingCode;
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(`meta_send_status_${response.status}: ${raw}`);
+  }
 
-    const vendor = currentVendor ?? (adapterProvider as any)?.vendor;
-    if (!vendor) {
-      const waitUntil = Date.now() + 12_000;
-      while (!(currentVendor ?? (adapterProvider as any)?.vendor) && Date.now() < waitUntil) {
-        await sleep(400);
-        if (lastPairingCode) return lastPairingCode;
-      }
-    }
+  log('info', 'meta_message_sent', {
+    correlationId,
+    to,
+  });
+}
 
-    const vendorReady = currentVendor ?? (adapterProvider as any)?.vendor;
-    if (!vendorReady) {
-      lastPairingError = 'Socket Baileys aun no disponible. Reintenta en unos segundos.';
-      return null;
-    }
+const app = express();
 
-    if (typeof vendorReady.requestPairingCode !== 'function') {
-      lastPairingError = 'La version actual del provider no soporta requestPairingCode.';
-      return null;
-    }
+app.get('/health', (_req, res) => {
+  res.status(200).send('ok');
+});
 
-    if (isVendorAuthenticated(vendorReady)) {
-      lastPairingCode = null;
-      lastPairingError = null;
-      return null;
-    }
+app.get('/ready', (_req, res) => {
+  res.status(200).json({
+    ready: true,
+    provider: 'meta-cloud-api',
+    graphVersion: env.META_GRAPH_VERSION,
+    phoneNumberId: env.META_PHONE_NUMBER_ID,
+  });
+});
 
-    pairingRequestInFlight = true;
+app.get('/webhook', (req, res) => {
+  const mode = String(req.query['hub.mode'] ?? '');
+  const token = String(req.query['hub.verify_token'] ?? '');
+  const challenge = String(req.query['hub.challenge'] ?? '');
 
-    try {
-      const pairingCode = await vendorReady.requestPairingCode(sanitizedPhoneNumber);
-      lastPairingCode = String(pairingCode ?? '').trim() || null;
-      lastPairingAt = new Date().toISOString();
+  if (mode === 'subscribe' && token === env.META_VERIFY_TOKEN) {
+    log('info', 'meta_webhook_verified');
+    res.status(200).send(challenge);
+    return;
+  }
 
-      if (!lastPairingCode) {
-        lastPairingError = 'Baileys no devolvio pairing code.';
-        return null;
-      }
+  log('warn', 'meta_webhook_verify_failed', { mode });
+  res.status(403).send('forbidden');
+});
 
-      lastPairingError = null;
-      logPairingCode(lastPairingCode);
-      log('info', 'pairing_code_generated', {
-        reason,
-        phoneNumber: sanitizedPhoneNumber,
-        pairingAt: lastPairingAt,
-      });
-      return lastPairingCode;
-    } catch (error) {
-      lastPairingError = extractErrorMessage(error);
-      log('error', 'pairing_code_generation_failed', {
-        reason,
-        error: lastPairingError,
-        hint: 'Verifica PHONE_NUMBER, conectividad y estado de la sesion.',
-      });
-      if (env.LOG_LEVEL === 'debug' && error instanceof Error && error.stack) {
-        log('debug', 'pairing_code_generation_stack', { reason, stack: error.stack });
-      }
-      return null;
-    } finally {
-      pairingRequestInFlight = false;
-    }
-  };
+app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
+  const signatureHeader = req.header('x-hub-signature-256');
 
-  const ensurePairingCodeWithRetry = async (): Promise<void> => {
-    if (!env.BAILEYS_USE_PAIRING_CODE) return;
+  if (!verifyMetaSignature(rawBody, signatureHeader)) {
+    log('warn', 'meta_signature_invalid');
+    res.status(403).send('invalid signature');
+    return;
+  }
 
-    for (let attempt = 0; attempt <= PAIRING_RETRY_DELAYS_MS.length; attempt += 1) {
-      try {
-        const pairingCode = await ensurePairingCode(`startup_attempt_${attempt + 1}`);
-        if (pairingCode || isWhatsAppReady) return;
-      } catch (error) {
-        const message = extractErrorMessage(error);
-        lastPairingError = message;
-        log('error', 'startup_pairing_attempt_failed', { attempt: attempt + 1, error: message });
-      }
+  let payload: any;
+  try {
+    payload = JSON.parse(rawBody.toString('utf-8'));
+  } catch {
+    res.status(400).send('invalid json');
+    return;
+  }
 
-      if (attempt < PAIRING_RETRY_DELAYS_MS.length) {
-        await sleep(PAIRING_RETRY_DELAYS_MS[attempt]);
-      }
-    }
-  };
+  const incoming = extractIncomingMessages(payload);
+  if (!incoming.length) {
+    res.status(200).send('ok');
+    return;
+  }
 
-  const setupPairingTracking = (): void => {
-    (adapterProvider as any).on?.('require_action', (payload: unknown) => {
-      const pairingCode = extractPairingCodeFromRequireAction(payload);
-      if (!pairingCode) return;
-
-      lastPairingCode = pairingCode;
-      lastPairingAt = new Date().toISOString();
-      lastPairingError = null;
-      logPairingCode(pairingCode);
-      log('info', 'pairing_code_received_from_provider_event', { pairingAt: lastPairingAt });
-    });
-
-    (adapterProvider as any).on?.('auth_failure', (payload: unknown) => {
-      const message = Array.isArray(payload)
-        ? payload.filter((item) => typeof item === 'string').join(' | ')
-        : extractErrorMessage(payload);
-      lastPairingError = message || 'auth_failure';
-      log('error', 'baileys_auth_failure', { error: lastPairingError });
-    });
-
-    (adapterProvider as any).on?.('ready', (ready: unknown) => {
-      if (ready === true) {
-        isWhatsAppReady = true;
-        lastPairingCode = null;
-        lastPairingError = null;
-      }
-    });
-
-    const probe = setInterval(() => {
-      const vendor = (adapterProvider as any)?.vendor;
-      if (!vendor) return;
-
-      clearInterval(probe);
-      currentVendor = vendor;
-
-      if (isVendorAuthenticated(vendor)) {
-        log('info', 'whatsapp_session_detected_waiting_connection_open');
-      }
-
-      if ((vendor as any).ev?.on) {
-        (vendor as any).ev.on('connection.update', async (update: any) => {
-          const connection = update?.connection as string | undefined;
-          const disconnectError = update?.lastDisconnect?.error;
-
-          if (env.LOG_LEVEL === 'debug') {
-            log('debug', 'baileys_connection_update', {
-              connection,
-              hasUser: Boolean((vendor as any).user),
-              isRegistered: Boolean((vendor as any).authState?.creds?.registered),
-              isNewLogin: Boolean(update?.isNewLogin),
-              lastDisconnectError: disconnectError ? extractErrorMessage(disconnectError) : null,
-            });
-          }
-
-          if (connection === 'connecting' || connection === 'open' || connection === 'close') {
-            log('info', 'baileys_connection_state', { connection });
-          }
-
-          if (disconnectError) {
-            lastPairingError = extractErrorMessage(disconnectError);
-            log('error', 'baileys_connection_error', { error: lastPairingError });
-          }
-
-          if (connection === 'open') {
-            isWhatsAppReady = true;
-            lastPairingCode = null;
-            lastPairingError = null;
-            return;
-          }
-
-          if (connection === 'close') {
-            isWhatsAppReady = false;
-            return;
-          }
-
-          if (connection === 'connecting') {
-            isWhatsAppReady = false;
-            await ensurePairingCode('connection_connecting');
-          }
-        });
-      }
-
-      void ensurePairingCodeWithRetry();
-    }, 1000);
-  };
-
-  const welcomeFlow = addKeyword(EVENTS.WELCOME).addAction(async (ctx: any, { flowDynamic }: { flowDynamic: (message: string) => Promise<void> }) => {
-    const providerMessageId = String((ctx as { id?: string }).id ?? `${Date.now()}-${ctx.from}`);
-    const correlationId = providerMessageId || randomUUID();
-    const text = String(ctx.body ?? '').trim();
-
-    if (!text) return;
-
-    if (isDuplicate(providerMessageId)) {
+  for (const message of incoming) {
+    const correlationId = message.providerMessageId || randomUUID();
+    if (isDuplicate(message.providerMessageId)) {
       log('debug', 'duplicate_message_ignored', {
-        from: ctx.from,
-        providerMessageId,
+        from: message.from,
+        providerMessageId: message.providerMessageId,
         correlationId,
       });
-      return;
+      continue;
     }
 
     const startedAt = Date.now();
     log('info', 'incoming_message', {
-      from: ctx.from,
-      providerMessageId,
+      from: message.from,
+      providerMessageId: message.providerMessageId,
       correlationId,
-      text: truncateText(text),
+      text: truncateText(message.text),
     });
 
     try {
       const orchestratorRes = await callOrchestrator({
-        from: ctx.from,
-        pushName: (ctx as { pushName?: string }).pushName,
-        body: text,
-        providerMessageId,
+        from: message.from,
+        pushName: message.pushName,
+        body: message.text,
+        providerMessageId: message.providerMessageId,
         correlationId,
       });
 
       const reply = extractReplyText(orchestratorRes);
-      await flowDynamic(reply);
+      await sendWhatsappMessage(message.from, reply, correlationId);
 
       const orchestrationCorrelationId = orchestratorRes.correlationId
         ?? orchestratorRes.responses?.[0]?.payload?.correlationId;
 
       log('info', 'orchestrator_replied', {
-        from: ctx.from,
-        providerMessageId,
+        from: message.from,
+        providerMessageId: message.providerMessageId,
         correlationId,
         orchestrationCorrelationId,
         status: 'ok',
         latencyMs: Date.now() - startedAt,
       });
     } catch (error) {
-      log('error', 'orchestrator_error', {
-        from: ctx.from,
-        providerMessageId,
+      log('error', 'message_processing_failed', {
+        from: message.from,
+        providerMessageId: message.providerMessageId,
         correlationId,
         status: 'error',
         latencyMs: Date.now() - startedAt,
         error: error instanceof Error ? error.message : String(error),
       });
-
-      await flowDynamic('En este momento no puedo procesar tu solicitud, intenta más tarde.');
     }
+  }
+
+  res.status(200).send('ok');
+});
+
+app.listen(env.PORT, () => {
+  log('info', 'http_server_started', {
+    port: env.PORT,
+    provider: 'meta-cloud-api',
+    graphVersion: env.META_GRAPH_VERSION,
+    phoneNumberId: env.META_PHONE_NUMBER_ID,
   });
-
-  const bot = await createBot({
-    flow: createFlow([welcomeFlow]),
-    provider: adapterProvider,
-    database: new MemoryDB(),
-  });
-
-  // BuilderBot only initializes Baileys vendor when httpServer() is called.
-  // Use port 0 to avoid conflicting with our control API on env.PORT.
-  bot.httpServer(0);
-
-  setupPairingTracking();
-
-  const app = express();
-  app.get('/health', (_req, res) => res.status(200).send('ok'));
-  app.get('/ready', (_req, res) => {
-    res.status(200).json({
-      ready: isWhatsAppReady,
-      lastError: lastPairingError,
-    });
-  });
-
-  const buildPairingPayload = () => ({
-    usePairingCode: env.BAILEYS_USE_PAIRING_CODE,
-    phoneNumber: sanitizedPhoneNumber,
-    sessionPath: env.BAILEYS_SESSION_PATH,
-    ready: isWhatsAppReady,
-    pairingCode: env.BAILEYS_USE_PAIRING_CODE && !isWhatsAppReady ? lastPairingCode : null,
-    pairingAt: lastPairingAt,
-    error: env.BAILEYS_USE_PAIRING_CODE ? lastPairingError : null,
-  });
-
-  app.get('/pairing-code', async (_req, res) => {
-    if (env.BAILEYS_USE_PAIRING_CODE && !isWhatsAppReady) {
-      await ensurePairingCode('http_pairing_code_endpoint');
-    }
-
-    res.status(200).json({
-      ...buildPairingPayload(),
-    });
-  });
-  app.get('/pairing', async (_req, res) => {
-    if (env.BAILEYS_USE_PAIRING_CODE && !isWhatsAppReady) {
-      await ensurePairingCode('http_pairing_endpoint');
-    }
-
-    res.status(200).json({
-      ready: isWhatsAppReady,
-      phoneNumber: sanitizedPhoneNumber,
-      sessionPath: env.BAILEYS_SESSION_PATH,
-      usePairingCode: env.BAILEYS_USE_PAIRING_CODE,
-    });
-  });
-
-  app.listen(env.PORT, () => {
-    log('info', 'http_control_server_started', { port: env.PORT });
-    log('info', 'baileys_pairing_mode', {
-      usePairingCode: env.BAILEYS_USE_PAIRING_CODE,
-      phoneNumber: sanitizedPhoneNumber,
-      sessionPath: env.BAILEYS_SESSION_PATH,
-    });
-  });
-}
-
-bootstrap().catch((error) => {
-  log('error', 'bootstrap_failed', {
-    error: error instanceof Error ? error.message : String(error),
-  });
-  process.exit(1);
 });

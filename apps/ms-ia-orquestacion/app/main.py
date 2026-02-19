@@ -1,7 +1,6 @@
 import logging
 import os
 import uuid
-from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -23,16 +22,11 @@ logging.basicConfig(
 logger = logging.getLogger("ms-ia-orquestacion")
 
 
-def _safe_mongo_target(uri: str) -> str:
-    if not uri:
+def _safe_qdrant_target(url: str) -> str:
+    if not url:
         return "not-configured"
-    try:
-        parsed = urlparse(uri)
-        host = parsed.netloc.split("@")[-1] if parsed.netloc else "unknown-host"
-        db_name = os.getenv("MONGODB_DB", "sofia")
-        return f"{host}/{db_name}"
-    except Exception:
-        return "unknown-host"
+    collection = os.getenv("QDRANT_COLLECTION", "rag_documents")
+    return f"{url}/{collection}"
 
 app = FastAPI(
     title="SOFIA - MS IA Orquestacion",
@@ -104,7 +98,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
 @app.on_event("startup")
 def startup_debug_summary() -> None:
     logger.info(
-        "startup_config env_path=%s env_exists=%s cwd=%s openai_key=%s openai_model=%s rag_topk=%s rerank_enabled=%s rerank_top_k=%s temperature=%s mongo=%s",
+        "startup_config env_path=%s env_exists=%s cwd=%s openai_key=%s openai_model=%s rag_topk=%s rerank_enabled=%s rerank_top_k=%s temperature=%s qdrant=%s",
         ENV_PATH,
         os.path.exists(ENV_PATH),
         os.getcwd(),
@@ -114,7 +108,7 @@ def startup_debug_summary() -> None:
         os.getenv("RAG_RERANK_ENABLED", "true"),
         os.getenv("RAG_RERANK_TOP_K", os.getenv("RAG_RERANK_K", "5")),
         os.getenv("RAG_OPENAI_TEMPERATURE", os.getenv("RAG_TEMPERATURE", "0.3")),
-        _safe_mongo_target(os.getenv("MONGODB_URI", "")),
+        _safe_qdrant_target(os.getenv("QDRANT_URL", "")),
     )
 
 

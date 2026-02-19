@@ -1,1 +1,1 @@
-# MongoDB access package
+# Vector store access package

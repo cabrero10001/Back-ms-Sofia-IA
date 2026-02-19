@@ -8,12 +8,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from pymongo import UpdateOne
+from qdrant_client import models
 
 from app.ai.embeddings import embed_texts, estimate_tokens
 from app.core.config import get_settings
 from app.core.logger import get_logger
-from app.db.mongo import ensure_rag_indexes, get_rag_collection
+from app.db.qdrant import ensure_rag_collection, get_qdrant_client
 from app.ingest.chunking import Chunk, chunk_text
 from app.ingest.pdf_loader import flatten_pages, load_pdf_pages
 
@@ -99,12 +99,32 @@ def _prepare_docs(options: IngestOptions, chunks: list[Chunk], embeddings: list[
 class PDFIngestService:
     def __init__(self) -> None:
         self.settings = get_settings()
-        self.collection = get_rag_collection()
+        self.client = get_qdrant_client()
+
+    def _count_source_points(self, source: str) -> int:
+        total = 0
+        offset: str | int | None = None
+        source_filter = models.Filter(
+            must=[models.FieldCondition(key="source", match=models.MatchValue(value=source))]
+        )
+        while True:
+            points, next_offset = self.client.scroll(
+                collection_name=self.settings.qdrant_collection,
+                scroll_filter=source_filter,
+                with_payload=False,
+                with_vectors=False,
+                limit=256,
+                offset=offset,
+            )
+            total += len(points)
+            if next_offset is None:
+                return total
+            offset = next_offset
 
     def ingest_pdf(self, options: IngestOptions) -> IngestReport:
         started = time.perf_counter()
 
-        ensure_rag_indexes()
+        ensure_rag_collection()
 
         pages = load_pdf_pages(options.file_path)
         full_text, page_spans = flatten_pages(pages)
@@ -152,58 +172,49 @@ class PDFIngestService:
         source_docs_deleted = 0
 
         if options.replace_source:
-            delete_result = self.collection.delete_many({"source": options.source})
-            source_docs_deleted = int(delete_result.deleted_count)
+            source_docs_deleted = self._count_source_points(options.source)
+            source_filter = models.Filter(
+                must=[models.FieldCondition(key="source", match=models.MatchValue(value=options.source))]
+            )
+            self.client.delete(
+                collection_name=self.settings.qdrant_collection,
+                points_selector=models.FilterSelector(filter=source_filter),
+            )
             logger.info(
                 "ingest_pdf replace_source=true source=%s deleted=%d",
                 options.source,
                 source_docs_deleted,
             )
 
-        chunk_hashes = [_hash_chunk(options.doc_id, chunk) for chunk in chunks]
-        existing = self.collection.find(
-            {"textHash": {"$in": chunk_hashes}},
-            {"_id": 0, "textHash": 1, "version": 1},
-        )
-        existing_map = {doc["textHash"]: doc.get("version") for doc in existing}
-
         for start_idx in range(0, len(chunks), options.batch_size):
             batch_chunks = chunks[start_idx: start_idx + options.batch_size]
-            batch_hashes = [_hash_chunk(options.doc_id, chunk) for chunk in batch_chunks]
+            embeddings = embed_texts([chunk.text for chunk in batch_chunks], batch_size=options.batch_size)
+            docs = _prepare_docs(options, batch_chunks, embeddings)
 
-            to_process_chunks: list[Chunk] = []
-            to_process_hashes: list[str] = []
-            for chunk, text_hash in zip(batch_chunks, batch_hashes):
-                existing_version = existing_map.get(text_hash)
-                if existing_version == options.version:
-                    skipped += 1
-                    continue
-                to_process_chunks.append(chunk)
-                to_process_hashes.append(text_hash)
-
-            if not to_process_chunks:
-                continue
-
-            embeddings = embed_texts([chunk.text for chunk in to_process_chunks], batch_size=options.batch_size)
-            docs = _prepare_docs(options, to_process_chunks, embeddings)
-
-            ops = []
-            now = datetime.now(timezone.utc)
-            for doc, text_hash in zip(docs, to_process_hashes):
-                ops.append(
-                    UpdateOne(
-                        {"textHash": text_hash},
-                        {
-                            "$set": doc,
-                            "$setOnInsert": {"createdAt": now},
+            points: list[models.PointStruct] = []
+            for doc in docs:
+                point_id = doc["textHash"]
+                points.append(
+                    models.PointStruct(
+                        id=point_id,
+                        vector=doc["embedding"],
+                        payload={
+                            "docId": doc["docId"],
+                            "docName": doc["docName"],
+                            "source": doc["source"],
+                            "version": doc["version"],
+                            "chunkIndex": doc["chunkIndex"],
+                            "pageStart": doc["pageStart"],
+                            "pageEnd": doc["pageEnd"],
+                            "text": doc["text"],
+                            "textHash": doc["textHash"],
+                            "updatedAt": doc["updatedAt"].isoformat() if isinstance(doc["updatedAt"], datetime) else str(doc["updatedAt"]),
                         },
-                        upsert=True,
                     )
                 )
 
-            result = self.collection.bulk_write(ops, ordered=False)
-            inserted += result.upserted_count
-            updated += result.modified_count
+            self.client.upsert(collection_name=self.settings.qdrant_collection, points=points)
+            inserted += len(points)
 
         duration_ms = int((time.perf_counter() - started) * 1000)
         report = IngestReport(

@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from pymongo.collection import Collection
-from pymongo.errors import OperationFailure
+from qdrant_client import QdrantClient, models
 
 from app.core.logger import get_logger
 
@@ -29,71 +28,55 @@ class ChunkCandidate:
 
 
 def retrieve_candidates(
-    collection: Collection,
+    client: QdrantClient,
+    collection_name: str,
     query_embedding: list[float],
     topk: int,
     filters: dict[str, Any] | None,
     include_embedding: bool,
-    vector_index_name: str,
 ) -> list[ChunkCandidate]:
-    vector_stage_base: dict[str, Any] = {
-        "index": vector_index_name,
-        "path": "embedding",
-        "queryVector": query_embedding,
-        "numCandidates": max(100, topk * 4),
-        "limit": topk,
-    }
+    qdrant_filter: models.Filter | None = None
+    if filters:
+        qdrant_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key=str(key),
+                    match=models.MatchValue(value=value),
+                )
+                for key, value in filters.items()
+                if value is not None
+            ]
+        )
 
-    project_stage = {
-        "_id": 1,
-        "source": 1,
-        "version": 1,
-        "title": {"$ifNull": ["$title", "$docName", ""]},
-        "chunkText": {"$ifNull": ["$chunkText", "$text", ""]},
-        "chunkIndex": 1,
-        "metadata": 1,
-        "pageStart": 1,
-        "pageEnd": 1,
-        "score": {"$meta": "vectorSearchScore"},
-    }
-    if include_embedding:
-        project_stage["embedding"] = 1
+    docs = client.search(
+        collection_name=collection_name,
+        query_vector=query_embedding,
+        query_filter=qdrant_filter,
+        limit=topk,
+        with_payload=True,
+        with_vectors=include_embedding,
+    )
 
-    def _run_pipeline(use_vector_filter: bool) -> list[dict[str, Any]]:
-        vector_stage = dict(vector_stage_base)
-        pipeline = [{"$vectorSearch": vector_stage}]
-        if use_vector_filter and filters:
-            vector_stage["filter"] = filters
-        elif filters:
-            pipeline.append({"$match": filters})
-            pipeline.append({"$limit": topk})
-        pipeline.append({"$project": project_stage})
-        return list(collection.aggregate(pipeline))
-
-    try:
-        docs = _run_pipeline(use_vector_filter=True)
-    except OperationFailure as exc:
-        message = str(exc).lower()
-        if filters and "needs to be indexed as filter" in message:
-            logger.warning("vector_filter_not_indexed fallback_to_post_match filters=%s", list(filters.keys()))
-            docs = _run_pipeline(use_vector_filter=False)
-        else:
-            raise
     candidates: list[ChunkCandidate] = []
     for doc in docs:
+        payload = dict(doc.payload or {})
+        vector = doc.vector if include_embedding else None
+        if isinstance(vector, dict):
+            vector = None
+
         candidates.append(
             ChunkCandidate(
-                chunk_id=str(doc.get("_id")),
-                source=str(doc.get("source") or ""),
-                version=str(doc.get("version") or ""),
-                title=str(doc.get("title") or ""),
-                chunk_index=int(doc.get("chunkIndex") or 0),
-                text=str(doc.get("chunkText") or ""),
-                metadata=dict(doc.get("metadata") or {}),
-                mongo_score=float(doc.get("score") or 0.0),
-                embedding=doc.get("embedding") if include_embedding else None,
-                page_start=doc.get("pageStart"),
-                page_end=doc.get("pageEnd"),
+                chunk_id=str(doc.id),
+                source=str(payload.get("source") or ""),
+                version=str(payload.get("version") or ""),
+                title=str(payload.get("title") or payload.get("docName") or ""),
+                chunk_index=int(payload.get("chunkIndex") or 0),
+                text=str(payload.get("chunkText") or payload.get("text") or ""),
+                metadata=dict(payload.get("metadata") or {}),
+                mongo_score=float(doc.score or 0.0),
+                embedding=vector if isinstance(vector, list) else None,
+                page_start=payload.get("pageStart"),
+                page_end=payload.get("pageEnd"),
             )
         )
     return candidates
