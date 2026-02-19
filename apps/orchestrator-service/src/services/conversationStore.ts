@@ -1,4 +1,5 @@
 export type FlowStage =
+  | 'awaiting_policy_consent'
   | 'awaiting_category'
   | 'awaiting_question'
   | 'support'

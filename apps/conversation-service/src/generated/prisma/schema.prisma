@@ -8,32 +8,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Channel {
-  WHATSAPP
-  WEBCHAT
-}
-
-enum ConversationStatus {
-  OPEN
-  WAITING_INPUT
-  HANDOFF
-  CLOSED
-}
-
-enum Direction {
-  IN
-  OUT
-}
-
-enum MessageType {
-  TEXT
-  IMAGE
-  AUDIO
-  DOCUMENT
-  INTERACTIVE
-  SYSTEM
-}
-
 model Contact {
   id            String         @id @default(uuid())
   tenantId      String
@@ -60,9 +34,9 @@ model Conversation {
   currentFlowVersionId String?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
-  contact              Contact               @relation(fields: [contactId], references: [id], onDelete: Restrict)
-  messages             Message[]
+  contact              Contact               @relation(fields: [contactId], references: [id])
   contexts             ConversationContext[]
+  messages             Message[]
 
   @@index([tenantId, contactId, status])
   @@index([tenantId, lastMessageAt])
@@ -79,8 +53,8 @@ model Message {
   payload           Json
   providerMessageId String?
   createdAt         DateTime     @default(now())
+  contact           Contact      @relation(fields: [contactId], references: [id])
   conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  contact           Contact      @relation(fields: [contactId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, conversationId, createdAt])
   @@index([tenantId, providerMessageId])
@@ -97,4 +71,30 @@ model ConversationContext {
 
   @@unique([tenantId, conversationId, version])
   @@index([tenantId, conversationId])
+}
+
+enum Channel {
+  WHATSAPP
+  WEBCHAT
+}
+
+enum ConversationStatus {
+  OPEN
+  WAITING_INPUT
+  HANDOFF
+  CLOSED
+}
+
+enum Direction {
+  IN
+  OUT
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  DOCUMENT
+  INTERACTIVE
+  SYSTEM
 }
