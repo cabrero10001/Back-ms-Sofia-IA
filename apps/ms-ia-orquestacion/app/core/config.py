@@ -94,7 +94,7 @@ def get_settings() -> Settings:
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
         embedding_model=os.getenv("RAG_EMBED_MODEL", "text-embedding-3-small"),
-        embedding_dimensions=_get_int("RAG_EMBED_DIM", 1064),
+        embedding_dimensions=_get_int("RAG_EMBED_DIM", 1536),
         embedding_batch_size=_get_int("RAG_EMBED_BATCH_SIZE", 64),
         embedding_max_retries=_get_int("RAG_EMBED_MAX_RETRIES", 4),
         mongodb_uri=os.getenv("MONGODB_URI", ""),

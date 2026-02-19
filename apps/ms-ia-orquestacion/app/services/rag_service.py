@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -122,7 +123,8 @@ class RAGService:
         now = datetime.now(timezone.utc).isoformat()
         points: list[models.PointStruct] = []
         for idx, (chunk_text, vector) in enumerate(zip(chunks, vectors)):
-            point_id = hashlib.sha256(f"{source}|{idx}|{chunk_text}".encode("utf-8")).hexdigest()
+            hash_id = hashlib.sha256(f"{source}|{idx}|{chunk_text}".encode("utf-8")).hexdigest()
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, hash_id))
             points.append(
                 models.PointStruct(
                     id=point_id,

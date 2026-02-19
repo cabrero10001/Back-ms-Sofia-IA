@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,6 +61,10 @@ class IngestReport:
 def _hash_chunk(doc_id: str, chunk: Chunk) -> str:
     base = f"{doc_id}|{chunk.chunk_index}|{chunk.normalized_text}".encode("utf-8")
     return hashlib.sha256(base).hexdigest()
+
+
+def _point_id_from_hash(text_hash: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, text_hash))
 
 
 def _estimate_embedding_cost_usd(token_count: int) -> float:
@@ -193,7 +198,7 @@ class PDFIngestService:
 
             points: list[models.PointStruct] = []
             for doc in docs:
-                point_id = doc["textHash"]
+                point_id = _point_id_from_hash(str(doc["textHash"]))
                 points.append(
                     models.PointStruct(
                         id=point_id,

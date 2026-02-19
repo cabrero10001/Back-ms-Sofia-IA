@@ -9,7 +9,7 @@ Este modulo agrega un pipeline de ingesta masiva robusto para RAG usando OpenAI 
 - `QDRANT_COLLECTION` (default: `rag_documents`)
 - `QDRANT_API_KEY` (si aplica)
 - `RAG_EMBED_MODEL` (default: `text-embedding-3-small`)
-- `RAG_EMBED_DIM` **debe ser 1064**
+- `RAG_EMBED_DIM` **debe coincidir con la dimension de la coleccion en Qdrant** (recomendado: `1536`)
 
 Opcionales:
 
