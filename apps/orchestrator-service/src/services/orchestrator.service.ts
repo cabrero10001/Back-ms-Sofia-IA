@@ -50,34 +50,34 @@ interface Decision {
 }
 
 const RAG_NEEDS_CONTEXT_FALLBACK =
-  'Para ayudarte mejor, necesito un poco más de contexto. Cuéntame el tipo de contrato, tiempo laborado, ciudad/país y qué ocurrió exactamente.';
+  'Para ayudarte mejor, necesito un poco más de contexto. Cuéntame el tipo de caso, ciudad/país y qué ocurrió exactamente.';
 
 const RAG_NO_CONTENT_FALLBACK =
-  'No puedo responder esa pregunta porque en este momento no hay contenido relacionado en la base documental disponible.';
+  'No encontré suficiente contenido relacionado para responder esa pregunta con seguridad en este momento.';
 
 const APPOINTMENT_OFFER_TEXT =
-  '¿Deseas agendar una cita con un asesor profesional? Responde: "si, deseo agendar una cita" o "no, gracias".';
+  'Si quieres, también te puedo ayudar a agendar una cita con un asesor. Puedes responder: "si, deseo agendar una cita" o "no, gracias".';
 
 const APPOINTMENT_MODE_TEXT =
-  'Perfecto. Elige la modalidad de la cita: presencial o virtual.';
+  'Perfecto, vamos con eso. ¿Prefieres que la cita sea presencial o virtual?';
 
 const APPOINTMENT_USER_DATA_START_TEXT =
-  'Perfecto, antes de agendar la cita necesito tus datos. Indica tu nombre completo.';
+  'Perfecto, antes de agendar la cita te pido unos datos rápidos. Empecemos con tu nombre completo.';
 
 const APPOINTMENT_DOC_TYPE_TEXT =
-  'Gracias. Ahora indica tu tipo de documento (CC, CE, TI, PASAPORTE o PPT).';
+  'Gracias. Ahora cuéntame tu tipo de documento (CC, CE, TI, PASAPORTE o PPT).';
 
 const DATA_POLICY_TEXT =
-  'Antes de comenzar, necesito tu autorización para el tratamiento de datos personales conforme a la política de privacidad. Responde: acepto o no acepto.';
+  '¡Hola! 👋 Qué gusto saludarte. Antes de comenzar, ¿me autorizas a tratar tus datos personales según nuestra política de privacidad?';
 
 const DATA_POLICY_REJECTED_TEXT =
-  'Entiendo. Sin tu autorización no puedo continuar con la atención. Si cambias de opinión, escribe reset. ¡Hasta pronto!';
+  'Gracias por responder. Sin esa autorización no puedo continuar por este medio. Si más adelante quieres continuar, escribe reset. ¡Aquí estaré!';
 
 const FOLLOWUP_HINT_TEXT =
-  'Si tienes otra duda escribe reset. Si deseas agendar una cita escribe: si, deseo agendar una cita. Si deseas terminar la conversación, escribe salir.';
+  'Si quieres seguir con otra duda, escribe reset. Si prefieres agendar una cita, escribe: si, deseo agendar una cita. Y si deseas cerrar la conversación, escribe salir.';
 
 const GOODBYE_TEXT =
-  '¡Con gusto! Me alegra haberte ayudado. Si quieres volver luego, escribe reset. ¡Hasta pronto!';
+  '¡Con mucho gusto! Me alegra haberte ayudado. Cuando quieras volver, escribe reset. ¡Que estés muy bien!';
 
 const RAG_ERROR_FALLBACK =
   'En este momento no pude consultar la base jurídica. Por favor cuéntame más contexto y lo intento de nuevo.';
@@ -85,7 +85,7 @@ const RAG_ERROR_FALLBACK =
 const PRELIMINARY_GUIDANCE_DISCLAIMER =
   'Recuerda: esta orientación es preliminar y no reemplaza la atención presencial del Consultorio Jurídico.';
 
-const MENU_TEXT = 'Hola 👋 Te doy la bienvenida a SOF-IA, el asistente virtual del Consultorio Jurídico.\nPuedo orientarte de forma preliminar en consultas laborales y sobre competencias del consultorio, además de ayudarte con soporte y agendamiento de citas.\n\n¿En qué te ayudo hoy?\n1) Laboral\n2) Soporte\n3) Agendar cita';
+const MENU_TEXT = '¡Bienvenido/a! Soy SOF-IA 👋, tu asistente virtual del Consultorio Jurídico.\n\nPuedo orientarte de forma preliminar en temas como:\n- Laboral\n- Penal\n- Civil\n- Familia\n- Constitucional\n- Administrativos\n- Conciliación\n- Tránsito\n\nCuéntame con tranquilidad tu caso o tu duda, y te acompaño paso a paso.';
 
 function mapChannel(channel: MessageIn['channel']): ConversationChannel {
   return channel === 'whatsapp' ? 'WHATSAPP' : 'WEBCHAT';
@@ -218,6 +218,8 @@ function isAnotherQuestionPrompt(text: string): boolean {
 function isPolicyAccepted(text: string): boolean {
   const normalized = normalizeForMatch(text);
   return [
+    'si',
+    'sí',
     'acepto',
     'si acepto',
     'sí acepto',
@@ -225,16 +227,27 @@ function isPolicyAccepted(text: string): boolean {
     'si autorizo',
     'sí autorizo',
     'de acuerdo',
+    'ok',
+    'okay',
+    'claro',
+    'vale',
+    'listo',
+    'dale',
   ].includes(normalized);
 }
 
 function isPolicyRejected(text: string): boolean {
   const normalized = normalizeForMatch(text);
   return [
+    'nope',
     'no acepto',
     'no autorizo',
     'rechazo',
     'no',
+    'negativo',
+    'cancelar',
+    'prefiero no',
+    'no gracias',
   ].includes(normalized);
 }
 
@@ -619,7 +632,7 @@ async function resolveLaboralQuery(input: {
   correlationId: string;
   tenantId: string;
   conversationId: string;
-}): Promise<{ responseText: string; payload: Record<string, unknown>; noSupport: boolean; queryUsed: string }> {
+}): Promise<{ responseText: string; payload: Record<string, unknown>; noSupport: boolean; queryUsed: string; inferredCaseType?: string }> {
   const query = input.queryText.trim();
   if (!query) {
     return {
@@ -633,13 +646,14 @@ async function resolveLaboralQuery(input: {
   const ragStartedAt = Date.now();
   try {
     const ragResult = await askRag(query, input.correlationId);
+    const inferredCaseType = inferCaseTypeLabel(query, ragResult.answer);
     const fallbackKind = pickRagFallbackKind(ragResult);
     const isNoSupport = fallbackKind !== 'none';
     const responseText = fallbackKind === 'none'
-      ? buildRagWhatsappText(ragResult, 'Laboral')
+      ? buildRagWhatsappText(ragResult, inferredCaseType)
       : fallbackKind === 'no_content'
-        ? appendPreliminaryDisclaimer(RAG_NO_CONTENT_FALLBACK)
-        : appendPreliminaryDisclaimer(RAG_NEEDS_CONTEXT_FALLBACK);
+        ? appendPreliminaryDisclaimer(buildNoContentFallback(inferredCaseType))
+        : appendPreliminaryDisclaimer(buildNeedsContextFallback(inferredCaseType));
 
     log.info(
       {
@@ -659,6 +673,7 @@ async function resolveLaboralQuery(input: {
       responseText,
       payload: {
         correlationId: input.correlationId,
+        inferredCaseType: inferredCaseType ?? null,
         rag: {
           statusCode: ragResult.statusCode,
           latencyMs: ragResult.latencyMs,
@@ -670,6 +685,7 @@ async function resolveLaboralQuery(input: {
       },
       noSupport: isNoSupport,
       queryUsed: query,
+      inferredCaseType,
     };
   } catch (error) {
     log.warn(
@@ -697,6 +713,7 @@ async function resolveLaboralQuery(input: {
       },
       noSupport: true,
       queryUsed: query,
+      inferredCaseType: undefined,
     };
   }
 }
@@ -1521,6 +1538,14 @@ async function runStatefulFlow(input: {
   }
 
   if (state.stage === 'awaiting_category') {
+    if (isGreeting(input.text)) {
+      return {
+        responseText: MENU_TEXT,
+        patch: { intent: 'general', step: 'ask_intent', profile: state.profile ?? {} },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', category: 'intro' },
+      };
+    }
+
     if (isLaboralSelection(input.text)) {
       conversationStore.set(key, { stage: 'awaiting_question', category: 'laboral', profile: state.profile ?? {} });
       return {
@@ -1551,6 +1576,47 @@ async function runStatefulFlow(input: {
         responseText: 'Perfecto. Describe tu problema de soporte para ayudarte.',
         patch: { intent: 'soporte', step: 'collecting_issue', profile: state.profile ?? {} },
         payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', category: 'soporte' },
+      };
+    }
+
+    if (input.rawText.trim().length > 0) {
+      const baseProfile = state.profile ?? {};
+      const initialQuery = input.rawText.trim();
+
+      const rag = await resolveLaboralQuery({
+        queryText: initialQuery,
+        correlationId: input.correlationId,
+        tenantId: input.messageIn.tenantId,
+        conversationId: input.conversationId,
+      });
+
+      const nextProfile = {
+        ...baseProfile,
+        lastLaboralQuery: rag.queryUsed,
+        lastRagNoSupport: rag.noSupport,
+      };
+
+      const shouldPersistAsLaboral = rag.inferredCaseType === 'Laboral';
+
+      conversationStore.set(key, {
+        stage: shouldPersistAsLaboral ? 'awaiting_question' : 'awaiting_category',
+        category: shouldPersistAsLaboral ? 'laboral' : undefined,
+        profile: nextProfile,
+      });
+
+      return {
+        responseText: rag.responseText,
+        patch: {
+          intent: 'consulta_laboral',
+          step: 'ask_issue',
+          profile: nextProfile,
+        },
+        payload: {
+          orchestrator: true,
+          flow: 'stateful',
+          ...rag.payload,
+          directCaseEntry: true,
+        },
       };
     }
 
@@ -1607,27 +1673,7 @@ async function runStatefulFlow(input: {
     const previousQuery = typeof profile.lastLaboralQuery === 'string' ? profile.lastLaboralQuery : '';
     const previousNoSupport = profile.lastRagNoSupport === true;
     const currentText = input.rawText.trim();
-
-    const competence = evaluateLaboralCompetence(currentText);
-    if (competence.status === 'not_competent') {
-      conversationStore.clear(key);
-      conversationStore.set(key, defaultState());
-      return {
-        responseText: `Según la información que compartes, este caso no sería competencia del consultorio laboral. ${competence.reason ?? ''} Si deseas iniciar una nueva consulta, escribe reset. ¡Hasta pronto!`,
-        patch: { intent: 'general', step: 'ask_intent', profile: { policyAccepted: true } },
-        payload: {
-          orchestrator: true,
-          correlationId: input.correlationId,
-          flow: 'stateful',
-          ended: true,
-          competence: {
-            area: 'laboral',
-            status: 'not_competent',
-            reason: competence.reason ?? null,
-          },
-        },
-      };
-    }
+    const queryCaseType = inferCaseTypeFromText(currentText);
 
     const queryText = previousNoSupport && previousQuery
       ? `${previousQuery}\n\nDetalles adicionales del usuario: ${currentText}`
@@ -1642,7 +1688,7 @@ async function runStatefulFlow(input: {
 
     conversationStore.set(key, {
       stage: 'awaiting_question',
-      category: 'laboral',
+      category: queryCaseType === 'Laboral' || !queryCaseType ? 'laboral' : undefined,
       profile: {
         ...profile,
         lastLaboralQuery: rag.queryUsed,
@@ -1914,6 +1960,16 @@ function pickRagFallbackKind(result: RagAnswerResult): RagFallbackKind {
   }
 
   if (result.status === 'low_confidence') {
+    const hasEvidence = result.citations.length > 0 || result.usedChunks.length > 0;
+    if (!noInfoAnswer && hasEvidence && (result.bestScore ?? 0) >= 0.45) {
+      return 'none';
+    }
+    if (noInfoAnswer && hasEvidence && (result.bestScore ?? 0) >= 0.55) {
+      return 'needs_context';
+    }
+    if (!hasEvidence) {
+      return 'no_content';
+    }
     return 'needs_context';
   }
 
@@ -1943,9 +1999,76 @@ function appendPreliminaryDisclaimer(text: string): string {
   return `${text}\n\n${PRELIMINARY_GUIDANCE_DISCLAIMER}`;
 }
 
-function buildRagWhatsappText(result: RagAnswerResult, caseType: string): string {
+function isBotInfoQuery(text: string): boolean {
+  const normalized = normalizeForMatch(text);
+  return [
+    'que tipos de casos atiendes',
+    'que tipo de casos atiendes',
+    'que casos atiendes',
+    'quien eres',
+    'que puedes hacer',
+    'como funcionas',
+    'como funciona',
+    'que hace el bot',
+    'que haces',
+  ].some((item) => normalized.includes(item));
+}
+
+function inferCaseTypeFromText(text: string): string | undefined {
+  const normalized = normalizeForMatch(text);
+  const matchers: Array<{ label: string; keys: string[] }> = [
+    { label: 'Laboral', keys: ['laboral', 'despido', 'liquidacion', 'empleador', 'contrato de trabajo', 'salario', 'cesantias', 'vacaciones'] },
+    { label: 'Penal', keys: ['penal', 'victima', 'acusador', 'querellable', 'homicidio', 'hurto', 'fiscalia'] },
+    { label: 'Civil', keys: ['civil', 'jueces municipales', 'compraventa', 'arrendamiento', 'incumplimiento de contrato'] },
+    { label: 'Familia', keys: ['familia', 'patria potestad', 'custodia', 'comisarias de familia', 'separar', 'separacion', 'divorcio', 'pareja'] },
+    { label: 'Constitucional', keys: ['tutela', 'cumplimiento', 'populares', 'derecho de peticion'] },
+    { label: 'Administrativo', keys: ['administrativa', 'superintendencia', 'sede administrativa', 'recursos', 'peticion', 'queja', 'reclamacion'] },
+    { label: 'Conciliación', keys: ['conciliacion', 'centro de conciliacion', 'conciliables'] },
+    { label: 'Tránsito', keys: ['transito', 'contravencionales', 'comparendo', 'multa'] },
+  ];
+
+  for (const matcher of matchers) {
+    if (matcher.keys.some((key) => normalized.includes(key))) return matcher.label;
+  }
+
+  return undefined;
+}
+
+function inferCaseTypeLabel(query: string, answer: string): string | undefined {
+  if (isBotInfoQuery(query)) return undefined;
+  return inferCaseTypeFromText(`${query} ${answer}`);
+}
+
+function buildNeedsContextFallback(caseType?: string): string {
+  if (caseType === 'Laboral') {
+    return 'Para darte una orientación más precisa, compárteme solo este dato faltante: tipo de contrato o fecha de terminación laboral.';
+  }
+  if (caseType === 'Familia') {
+    return 'Para orientarte mejor en este caso de familia, indícame quiénes están involucrados y qué necesitas resolver puntualmente.';
+  }
+  if (caseType === 'Penal') {
+    return 'Para orientarte mejor en este caso penal, indícame brevemente el hecho principal y en qué etapa está el proceso.';
+  }
+  if (caseType === 'Constitucional') {
+    return 'Para orientarte mejor, dime qué derecho consideras vulnerado y por quién.';
+  }
+  if (caseType) {
+    return `Para orientarte mejor en este caso de ${caseType.toLowerCase()}, compárteme un dato adicional clave del hecho principal.`;
+  }
+  return 'Para orientarte mejor, compárteme un dato adicional del caso y te respondo de forma más precisa.';
+}
+
+function buildNoContentFallback(caseType?: string): string {
+  if (caseType) {
+    return `No encontré suficiente contenido del consultorio para responder con seguridad este caso de ${caseType.toLowerCase()}. Si quieres, dame más detalles y lo intento de nuevo.`;
+  }
+  return RAG_NO_CONTENT_FALLBACK;
+}
+
+function buildRagWhatsappText(result: RagAnswerResult, caseType?: string): string {
   const base = sanitizeRagAnswerForUser(result.answer.trim());
-  return truncateForWhatsapp(`Tipo de caso: ${caseType}\n\n${appendPreliminaryDisclaimer(base)}\n\n${FOLLOWUP_HINT_TEXT}`);
+  const prefix = caseType ? `Tipo de caso: ${caseType}\n\n` : '';
+  return truncateForWhatsapp(`${prefix}${appendPreliminaryDisclaimer(base)}\n\n${FOLLOWUP_HINT_TEXT}`);
 }
 
 export const orchestratorService = {
@@ -2044,15 +2167,17 @@ export const orchestratorService = {
 
         try {
           const ragResult = await askRag(query, correlationId);
+          const inferredCaseType = inferCaseTypeLabel(query, ragResult.answer);
           const fallbackKind = pickRagFallbackKind(ragResult);
           const isNoSupport = fallbackKind !== 'none';
           responseText = fallbackKind === 'none'
-            ? buildRagWhatsappText(ragResult, 'Laboral')
+            ? buildRagWhatsappText(ragResult, inferredCaseType)
             : fallbackKind === 'no_content'
-              ? appendPreliminaryDisclaimer(RAG_NO_CONTENT_FALLBACK)
-              : appendPreliminaryDisclaimer(RAG_NEEDS_CONTEXT_FALLBACK);
+              ? appendPreliminaryDisclaimer(buildNoContentFallback(inferredCaseType))
+              : appendPreliminaryDisclaimer(buildNeedsContextFallback(inferredCaseType));
           responsePayload = {
             ...responsePayload,
+            inferredCaseType: inferredCaseType ?? null,
             rag: {
               statusCode: ragResult.statusCode,
               latencyMs: ragResult.latencyMs,

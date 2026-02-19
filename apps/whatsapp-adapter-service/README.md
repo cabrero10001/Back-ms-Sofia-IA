@@ -1,12 +1,6 @@
-# WhatsApp Adapter Service
+# Telegram Adapter Service
 
-Adaptador temporal para pruebas end-to-end con WhatsApp Web usando BuilderBot + Baileys.
-
-## Instalacion
-
-```bash
-pnpm -C apps/whatsapp-adapter-service install
-```
+Este servicio conecta Telegram Bot API con `orchestrator-service`.
 
 ## Variables de entorno
 
@@ -16,14 +10,12 @@ Copiar `.env.example` a `.env` y ajustar:
 PORT=3050
 ORCHESTRATOR_URL=http://localhost:3022/v1/orchestrator/handle-message
 TENANT_ID=tenant_demo_flow
-CHANNEL=WHATSAPP
-PHONE_NUMBER=+57XXXXXXXXXX
-BAILEYS_USE_PAIRING_CODE=true
-BAILEYS_SESSION_PATH=./.sessions
-LOG_LEVEL=info
+CHANNEL=WEBCHAT
+TELEGRAM_BOT_TOKEN=1234567890:replace_with_bot_token
+TELEGRAM_POLLING_ENABLED=true
+TELEGRAM_POLL_TIMEOUT_S=25
+LOG_LEVEL=debug
 ```
-
-- Usa `LOG_LEVEL=debug` para ver eventos `connection.update` y errores detallados de Baileys.
 
 ## Ejecutar
 
@@ -31,72 +23,19 @@ LOG_LEVEL=info
 pnpm -C apps/whatsapp-adapter-service dev
 ```
 
-## Requisitos previos
-
-- `orchestrator-service` levantado en `3022`
-- `conversation-service` levantado en `3010`
-- `ms-ia-orquestacion` levantado si el orchestrator depende de IA
-
-## Pairing code (BAILEYS_USE_PAIRING_CODE=true)
-
-Flujo recomendado para desarrollo local:
-
-1) Borrar sesion previa para forzar nuevo pairing:
-
-```powershell
-Remove-Item -Recurse -Force .\apps\whatsapp-adapter-service\.sessions
-```
-
-2) Levantar el servicio:
-
-```powershell
-pnpm -C apps/whatsapp-adapter-service dev
-```
-
-3) Solicitar codigo de pairing por endpoint:
-
-```powershell
-Invoke-RestMethod http://localhost:3050/pairing-code
-```
-
-Comandos rapidos de verificacion:
-
-```powershell
-Invoke-RestMethod http://localhost:3050/health
-Invoke-RestMethod http://localhost:3050/ready
-Invoke-RestMethod http://localhost:3050/pairing
-Invoke-RestMethod http://localhost:3050/pairing-code
-```
-
-4) Ver codigo en consola:
-
-- Busca una linea como: `[whatsapp-adapter] PAIRING CODE: 123-456`
-
-5) Vincular en WhatsApp:
-
-- WhatsApp -> Dispositivos vinculados -> Vincular con numero
-- Ingresa el codigo mostrado por `/pairing-code` o en consola
-
-Notas:
-
-- Si la sesion ya esta autenticada y conectada (`ready=true`), `/pairing-code` devuelve `pairingCode=null`.
-- La sesion se persiste en `.sessions` para evitar re-pairing continuo.
-- `.gitignore` ya incluye `apps/whatsapp-adapter-service/.sessions/` para no commitear sesiones.
-
-## Endpoints de control
+## Endpoints
 
 - `GET /health` -> `ok`
-- `GET /ready` -> estado de conexion (`ready`, `lastConnectionState`, `lastError`)
-- `GET /pairing` -> resumen de pairing (incluye codigo si disponible)
-- `GET /pairing-code` -> codigo de pairing y ultimo error
+- `GET /ready` -> estado de polling y ultimo error
 
-## Flujo conversacional
+## Flujo
 
-- El adapter funciona como puente: reenvia mensajes al `orchestrator-service` y responde exactamente el texto retornado.
-- No mantiene logica local de ciudad/edad/asesor.
-- Los logs incluyen `correlationId` para trazabilidad entre adapter -> orchestrator -> ms-ia.
+- Recibe mensajes desde Telegram usando long polling (`getUpdates`).
+- Reenvia cada texto al `orchestrator-service`.
+- Responde en Telegram con el texto retornado por el orchestrator.
 
-## Limitaciones de Baileys
+## Requisitos
 
-- Evitar botones/listas/interactive messages por compatibilidad.
-- Usar mensajes de texto para pruebas de flujo.
+- `conversation-service` levantado (`3010`)
+- `orchestrator-service` levantado (`3022`)
+- `ms-ia-orquestacion` levantado (`3040`) si usas RAG
