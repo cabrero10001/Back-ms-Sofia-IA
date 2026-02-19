@@ -2,6 +2,17 @@
 
 Servicio FastAPI para IA/RAG.
 
+## Backend vectorial
+
+Este servicio usa Qdrant como vector store.
+
+Variables requeridas:
+
+- `OPENAI_API_KEY`
+- `QDRANT_URL`
+- `QDRANT_COLLECTION`
+- `QDRANT_API_KEY` (si tu cluster lo exige)
+
 ## Endpoint RAG
 
 - Ruta: `POST /v1/ai/rag-answer`

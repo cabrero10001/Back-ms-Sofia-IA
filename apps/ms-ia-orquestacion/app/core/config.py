@@ -65,6 +65,11 @@ class Settings:
     mongo_connect_timeout_ms: int
     mongo_socket_timeout_ms: int
 
+    qdrant_url: str
+    qdrant_api_key: str
+    qdrant_collection: str
+    qdrant_timeout_s: int
+
     chunk_size: int
     chunk_overlap: int
     min_chunk_size: int
@@ -99,6 +104,10 @@ def get_settings() -> Settings:
         mongo_server_selection_timeout_ms=_get_int("MONGO_SERVER_SELECTION_TIMEOUT_MS", 5000),
         mongo_connect_timeout_ms=_get_int("MONGO_CONNECT_TIMEOUT_MS", 5000),
         mongo_socket_timeout_ms=_get_int("MONGO_SOCKET_TIMEOUT_MS", 20000),
+        qdrant_url=os.getenv("QDRANT_URL", "http://localhost:6333"),
+        qdrant_api_key=os.getenv("QDRANT_API_KEY", ""),
+        qdrant_collection=os.getenv("QDRANT_COLLECTION", "rag_documents"),
+        qdrant_timeout_s=_get_int("QDRANT_TIMEOUT_S", 20),
         chunk_size=_get_int("RAG_INGEST_CHUNK_SIZE", 1000),
         chunk_overlap=_get_int("RAG_INGEST_CHUNK_OVERLAP", 150),
         min_chunk_size=_get_int("RAG_INGEST_MIN_CHUNK_SIZE", 300),

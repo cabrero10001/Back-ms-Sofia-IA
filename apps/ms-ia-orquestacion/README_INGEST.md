@@ -1,14 +1,13 @@
-# Ingest Masivo RAG (PDF -> Mongo Atlas)
+# Ingest Masivo RAG (PDF -> Qdrant)
 
-Este modulo agrega un pipeline de ingesta masiva robusto para RAG usando OpenAI SDK + MongoDB Atlas.
+Este modulo agrega un pipeline de ingesta masiva robusto para RAG usando OpenAI SDK + Qdrant.
 
 ## Requisitos
 
 - `OPENAI_API_KEY`
-- `MONGODB_URI`
-- `MONGODB_DB` (default: `sofia`)
-- `MONGODB_COLLECTION` (default: `rag_documents`)
-- `MONGODB_VECTOR_INDEX` (default: `vector_index_float32_ann`)
+- `QDRANT_URL`
+- `QDRANT_COLLECTION` (default: `rag_documents`)
+- `QDRANT_API_KEY` (si aplica)
 - `RAG_EMBED_MODEL` (default: `text-embedding-3-small`)
 - `RAG_EMBED_DIM` **debe ser 1064**
 
@@ -63,13 +62,11 @@ Esto elimina primero todos los documentos con `source=consultorio_juridico` y lu
 ## Idempotencia y reintentos
 
 - Cada chunk se identifica por `textHash = sha256(docId + chunkIndex + normalizedText)`.
-- Se crean indices:
-  - `uniq_text_hash` (unique)
-  - `uniq_doc_chunk_version` (unique)
-- Re-ejecutar no duplica datos; chunks iguales/version igual se cuentan como `skipped`.
+- Qdrant usa `textHash` como `point_id`, por lo que `upsert` no duplica puntos.
+- Si usas `--replace-source`, primero elimina los puntos del `source` y luego inserta la nueva version.
 - Embeddings usan batch + retries con backoff exponencial.
 
-## Estructura del documento Mongo
+## Estructura del payload en Qdrant
 
 ```json
 {

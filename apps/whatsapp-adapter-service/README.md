@@ -1,102 +1,47 @@
 # WhatsApp Adapter Service
 
-Adaptador temporal para pruebas end-to-end con WhatsApp Web usando BuilderBot + Baileys.
-
-## Instalacion
-
-```bash
-pnpm -C apps/whatsapp-adapter-service install
-```
+Adaptador para WhatsApp Business Platform (Cloud API de Meta).
 
 ## Variables de entorno
 
-Copiar `.env.example` a `.env` y ajustar:
+Copiar `.env.example` a `.env` y completar:
 
 ```env
 PORT=3050
 ORCHESTRATOR_URL=http://localhost:3022/v1/orchestrator/handle-message
 TENANT_ID=tenant_demo_flow
 CHANNEL=WHATSAPP
-PHONE_NUMBER=+57XXXXXXXXXX
-BAILEYS_USE_PAIRING_CODE=true
-BAILEYS_SESSION_PATH=./.sessions
 LOG_LEVEL=info
+
+META_VERIFY_TOKEN=replace-with-webhook-verify-token
+META_GRAPH_VERSION=v21.0
+META_PHONE_NUMBER_ID=123456789012345
+META_ACCESS_TOKEN=replace-with-permanent-access-token
+META_APP_SECRET=
 ```
 
-- Usa `LOG_LEVEL=debug` para ver eventos `connection.update` y errores detallados de Baileys.
+## Endpoints
 
-## Ejecutar
+- `GET /health`
+- `GET /ready`
+- `GET /webhook` (verificacion de Meta)
+- `POST /webhook` (recepcion de mensajes)
+
+## Configuracion en Meta
+
+1. En tu app de Meta agrega producto **WhatsApp**.
+2. Configura webhook apuntando a `https://<tu-dominio>/webhook`.
+3. Usa en Meta el mismo valor de `META_VERIFY_TOKEN`.
+4. Suscribe el campo `messages`.
+5. Usa un access token valido en `META_ACCESS_TOKEN`.
+
+## Ejecucion
 
 ```bash
 pnpm -C apps/whatsapp-adapter-service dev
 ```
 
-## Requisitos previos
+## Notas
 
-- `orchestrator-service` levantado en `3022`
-- `conversation-service` levantado en `3010`
-- `ms-ia-orquestacion` levantado si el orchestrator depende de IA
-
-## Pairing code (BAILEYS_USE_PAIRING_CODE=true)
-
-Flujo recomendado para desarrollo local:
-
-1) Borrar sesion previa para forzar nuevo pairing:
-
-```powershell
-Remove-Item -Recurse -Force .\apps\whatsapp-adapter-service\.sessions
-```
-
-2) Levantar el servicio:
-
-```powershell
-pnpm -C apps/whatsapp-adapter-service dev
-```
-
-3) Solicitar codigo de pairing por endpoint:
-
-```powershell
-Invoke-RestMethod http://localhost:3050/pairing-code
-```
-
-Comandos rapidos de verificacion:
-
-```powershell
-Invoke-RestMethod http://localhost:3050/health
-Invoke-RestMethod http://localhost:3050/ready
-Invoke-RestMethod http://localhost:3050/pairing
-Invoke-RestMethod http://localhost:3050/pairing-code
-```
-
-4) Ver codigo en consola:
-
-- Busca una linea como: `[whatsapp-adapter] PAIRING CODE: 123-456`
-
-5) Vincular en WhatsApp:
-
-- WhatsApp -> Dispositivos vinculados -> Vincular con numero
-- Ingresa el codigo mostrado por `/pairing-code` o en consola
-
-Notas:
-
-- Si la sesion ya esta autenticada y conectada (`ready=true`), `/pairing-code` devuelve `pairingCode=null`.
-- La sesion se persiste en `.sessions` para evitar re-pairing continuo.
-- `.gitignore` ya incluye `apps/whatsapp-adapter-service/.sessions/` para no commitear sesiones.
-
-## Endpoints de control
-
-- `GET /health` -> `ok`
-- `GET /ready` -> estado de conexion (`ready`, `lastConnectionState`, `lastError`)
-- `GET /pairing` -> resumen de pairing (incluye codigo si disponible)
-- `GET /pairing-code` -> codigo de pairing y ultimo error
-
-## Flujo conversacional
-
-- El adapter funciona como puente: reenvia mensajes al `orchestrator-service` y responde exactamente el texto retornado.
-- No mantiene logica local de ciudad/edad/asesor.
-- Los logs incluyen `correlationId` para trazabilidad entre adapter -> orchestrator -> ms-ia.
-
-## Limitaciones de Baileys
-
-- Evitar botones/listas/interactive messages por compatibilidad.
-- Usar mensajes de texto para pruebas de flujo.
+- El adapter reenvia texto al orchestrator y responde con lo que devuelve.
+- Si defines `META_APP_SECRET`, se valida firma `X-Hub-Signature-256`.

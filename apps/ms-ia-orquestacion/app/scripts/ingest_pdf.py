@@ -27,7 +27,7 @@ def _find_default_pdf() -> Path:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Ingest masivo de PDF a MongoDB Vector Search")
+    parser = argparse.ArgumentParser(description="Ingest masivo de PDF a Qdrant")
     parser.add_argument("--file", type=str, default=None, help="Ruta del PDF a ingestar")
     parser.add_argument("--doc-id", type=str, default=None, help="ID de documento")
     parser.add_argument("--source", type=str, default=None, help="Source del documento")
@@ -35,7 +35,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--overlap", type=int, default=None, help="Overlap de chunk en caracteres")
     parser.add_argument("--batch-size", type=int, default=None, help="Tamano de batch para embeddings")
     parser.add_argument("--version", type=str, default=None, help="Version logica del documento")
-    parser.add_argument("--dry-run", action="store_true", help="No inserta en Mongo, solo calcula reporte")
+    parser.add_argument("--dry-run", action="store_true", help="No inserta en Qdrant, solo calcula reporte")
     parser.add_argument("--replace-source", action="store_true", help="Elimina docs previos del mismo source antes de ingestar")
     return parser
 

@@ -7,7 +7,6 @@ import logging
 import os
 
 from fastapi import APIRouter, HTTPException, Request
-from pymongo.errors import PyMongoError
 
 from app.schemas.rag_schemas import (
     RagAnswerRequest,
@@ -95,21 +94,14 @@ async def rag_ingest(body: RagIngestRequest, request: Request) -> RagIngestRespo
     except RuntimeError as exc:
         error_msg = str(exc)
         logger.error("[%s] rag_ingest runtime_error: %s", request_id, error_msg)
-        if "auth failed" in error_msg.lower() or "authentication failed" in error_msg.lower() or "bad auth" in error_msg.lower():
+        if "qdrant" in error_msg.lower():
             raise HTTPException(
                 status_code=502,
-                detail=_error_payload("MONGO_AUTH_ERROR", "Autenticacion MongoDB fallida", error_msg),
+                detail=_error_payload("QDRANT_ERROR", "Error de Qdrant", error_msg),
             ) from exc
         raise HTTPException(
             status_code=502,
-            detail=_error_payload("MONGO_ERROR", "Error de MongoDB", error_msg),
-        ) from exc
-
-    except PyMongoError as exc:
-        logger.error("[%s] rag_ingest mongo_error: %s", request_id, exc)
-        raise HTTPException(
-            status_code=502,
-            detail=_error_payload("MONGO_ERROR", "Error de MongoDB", str(exc)),
+            detail=_error_payload("RAG_BACKEND_ERROR", error_msg),
         ) from exc
 
     except Exception as exc:
@@ -118,6 +110,11 @@ async def rag_ingest(body: RagIngestRequest, request: Request) -> RagIngestRespo
             raise HTTPException(
                 status_code=502,
                 detail=_error_payload("OPENAI_ERROR", "Error al comunicarse con OpenAI", str(exc)),
+            ) from exc
+        if "qdrant" in str(exc).lower():
+            raise HTTPException(
+                status_code=502,
+                detail=_error_payload("QDRANT_ERROR", "Error de Qdrant", str(exc)),
             ) from exc
         raise HTTPException(
             status_code=500,
@@ -259,31 +256,19 @@ async def rag_answer(body: RagAnswerRequest, request: Request) -> RagAnswerRespo
     except RuntimeError as exc:
         error_msg = str(exc)
         logger.error("[%s] rag_answer runtime_error: %s", request_id, error_msg)
-        if "auth failed" in error_msg.lower() or "authentication failed" in error_msg.lower() or "bad auth" in error_msg.lower():
+        if "qdrant" in error_msg.lower():
             raise HTTPException(
                 status_code=502,
-                detail=_error_payload("MONGO_AUTH_ERROR", "Autenticacion MongoDB fallida", error_msg),
+                detail=_error_payload("QDRANT_ERROR", "Error de Qdrant", error_msg),
             ) from exc
-        if "indice" in error_msg.lower() or "index" in error_msg.lower():
+        if "index" in error_msg.lower() or "collection" in error_msg.lower():
             raise HTTPException(
                 status_code=400,
                 detail=_error_payload("INDEX_ERROR", error_msg),
             ) from exc
-        if "ssl" in error_msg.lower() or "tls" in error_msg.lower():
-            raise HTTPException(
-                status_code=502,
-                detail=_error_payload("MONGO_SSL_ERROR", "Fallo de handshake TLS con MongoDB Atlas", error_msg),
-            ) from exc
         raise HTTPException(
             status_code=502,
-            detail=_error_payload("MONGO_ERROR", error_msg),
-        ) from exc
-
-    except PyMongoError as exc:
-        logger.error("[%s] rag_answer mongo_error: %s", request_id, exc)
-        raise HTTPException(
-            status_code=502,
-            detail=_error_payload("MONGO_ERROR", "Error de MongoDB", str(exc)),
+            detail=_error_payload("RAG_BACKEND_ERROR", error_msg),
         ) from exc
 
     except Exception as exc:
@@ -292,6 +277,11 @@ async def rag_answer(body: RagAnswerRequest, request: Request) -> RagAnswerRespo
             raise HTTPException(
                 status_code=502,
                 detail=_error_payload("OPENAI_ERROR", "Error al comunicarse con OpenAI", str(exc)),
+            ) from exc
+        if "qdrant" in str(exc).lower():
+            raise HTTPException(
+                status_code=502,
+                detail=_error_payload("QDRANT_ERROR", "Error de Qdrant", str(exc)),
             ) from exc
         raise HTTPException(
             status_code=500,
