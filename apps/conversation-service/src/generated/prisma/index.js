@@ -206,7 +206,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "C:\\Users\\alexs\\Documents\\ProyectoValle\\SOFIA\\apps\\conversation-service\\src\\generated\\prisma",
+      "value": "C:\\Users\\alexi\\Documents\\ValleSoftware\\Back-ms-Sofia-IA\\apps\\conversation-service\\src\\generated\\prisma",
       "fromEnvVar": null
     },
     "config": {
@@ -220,7 +220,7 @@ const config = {
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "C:\\Users\\alexs\\Documents\\ProyectoValle\\SOFIA\\apps\\conversation-service\\prisma\\schema.prisma",
+    "sourceFilePath": "C:\\Users\\alexi\\Documents\\ValleSoftware\\Back-ms-Sofia-IA\\apps\\conversation-service\\prisma\\schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {

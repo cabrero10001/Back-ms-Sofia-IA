@@ -224,41 +224,11 @@ class RetrievalPipelineService:
         best_score = top_scores[0] if top_scores else None
         threshold_triggered = should_reject_by_threshold(best_score, run_config.score_threshold)
         if threshold_triggered:
-            total_ms = round((time.perf_counter() - overall_started) * 1000, 2)
             logger.info(
-                "rag_pipeline threshold_reject best_score=%s threshold=%.3f",
+                "rag_pipeline low_confidence best_score=%s threshold=%.3f; proceeding_with_generation",
                 best_score,
                 run_config.score_threshold,
             )
-            return {
-                "response": {"answer": NO_SUPPORT_MESSAGE, "citations": [], "usedChunks": []},
-                "metrics": {
-                    "answerable": False,
-                    "thresholdTriggered": True,
-                    "top1Score": best_score,
-                    "top5Scores": top_scores,
-                    "usedChunkIds": [],
-                    "usedChunksCount": 0,
-                    "latencyMs": {
-                        "embed": embed_ms,
-                        "retrieval": retrieval_ms,
-                        "rerank": rerank_ms,
-                        "generate": 0.0,
-                        "total": total_ms,
-                    },
-                    "config": {
-                        "candidateTopK": run_config.candidate_topk,
-                        "finalK": run_config.final_k,
-                        "threshold": run_config.score_threshold,
-                        "rerankMode": run_config.rerank_mode,
-                        "rerankEnabled": run_config.rerank_enabled,
-                        "temperature": run_config.temperature,
-                        "sourceFilter": run_config.source_filter,
-                        "versionFilter": run_config.version_filter,
-                        "dryRun": run_config.dry_run,
-                    },
-                },
-            }
 
         if run_config.dry_run:
             total_ms = round((time.perf_counter() - overall_started) * 1000, 2)
@@ -318,7 +288,7 @@ class RetrievalPipelineService:
             "response": response,
             "metrics": {
                 "answerable": answerable,
-                "thresholdTriggered": False,
+                "thresholdTriggered": threshold_triggered,
                 "top1Score": best_score,
                 "top5Scores": top_scores,
                 "usedChunkIds": [chunk.chunk_id for chunk in top_chunks],

@@ -53,7 +53,7 @@ const RAG_NEEDS_CONTEXT_FALLBACK =
   'Para ayudarte mejor, necesito un poco más de contexto. Cuéntame el tipo de caso, ciudad/país y qué ocurrió exactamente.';
 
 const RAG_NO_CONTENT_FALLBACK =
-  'No encontré suficiente contenido relacionado para responder esa pregunta con seguridad en este momento.';
+  'Puedo orientarte de forma preliminar con la información del Consultorio. Para darte una respuesta útil ahora, comparte un dato clave del caso (por ejemplo: contrato/fecha en laboral, relación y situación en familia, o hecho principal en penal).';
 
 const APPOINTMENT_OFFER_TEXT =
   'Si quieres, también te puedo ayudar a agendar una cita con un asesor. Puedes responder: "si, deseo agendar una cita" o "no, gracias".';
@@ -626,6 +626,7 @@ type StatefulFlowResult = {
 };
 
 type RagFallbackKind = 'none' | 'needs_context' | 'no_content';
+const RAG_LOW_CONFIDENCE_ACCEPTANCE_SCORE = 0.35;
 
 async function resolveLaboralQuery(input: {
   queryText: string;
@@ -1956,25 +1957,25 @@ function pickRagFallbackKind(result: RagAnswerResult): RagFallbackKind {
     || normalizedAnswer.includes('no encontre suficiente soporte');
 
   if (result.status === 'no_context' && result.citations.length === 0 && result.usedChunks.length === 0) {
-    return 'no_content';
+    return 'needs_context';
   }
 
   if (result.status === 'low_confidence') {
     const hasEvidence = result.citations.length > 0 || result.usedChunks.length > 0;
-    if (!noInfoAnswer && hasEvidence && (result.bestScore ?? 0) >= 0.45) {
+    if (!noInfoAnswer && hasEvidence && (result.bestScore ?? 0) >= RAG_LOW_CONFIDENCE_ACCEPTANCE_SCORE) {
       return 'none';
     }
     if (noInfoAnswer && hasEvidence && (result.bestScore ?? 0) >= 0.55) {
       return 'needs_context';
     }
     if (!hasEvidence) {
-      return 'no_content';
+      return 'needs_context';
     }
     return 'needs_context';
   }
 
   if (noInfoAnswer) {
-    if (result.citations.length === 0 && result.usedChunks.length === 0) return 'no_content';
+    if (result.citations.length === 0 && result.usedChunks.length === 0) return 'needs_context';
     return 'needs_context';
   }
 
