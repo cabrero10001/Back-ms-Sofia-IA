@@ -34,6 +34,7 @@ apps/telegram-adapter-service/.sessions/
 apps/telegram-adapter-service/bot_sessions/
 apps/whatsapp-adapter-service/.sessions/
 apps/whatsapp-adapter-service/bot_sessions/
+apps/whatsapp-adapter-service/bot.qr.png
 
 # coverage
 coverage/
