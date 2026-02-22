@@ -1,41 +1,43 @@
-# Telegram Adapter Service
+# WhatsApp Adapter Service
 
-Este servicio conecta Telegram Bot API con `orchestrator-service`.
+Modo local de WhatsApp Web usando Baileys, con vinculacion por codigo o QR.
 
 ## Variables de entorno
 
-Copiar `.env.example` a `.env` y ajustar:
-
 ```env
-PORT=3050
+PORT=3051
 ORCHESTRATOR_URL=http://localhost:3022/v1/orchestrator/handle-message
 TENANT_ID=tenant_demo_flow
-CHANNEL=WEBCHAT
-TELEGRAM_BOT_TOKEN=1234567890:replace_with_bot_token
-TELEGRAM_POLLING_ENABLED=true
-TELEGRAM_POLL_TIMEOUT_S=25
+CHANNEL=WHATSAPP
+WHATSAPP_SESSION_DIR=./bot_sessions
+WHATSAPP_USE_PAIRING_CODE=true
+WHATSAPP_PHONE_NUMBER=573001112233
+WHATSAPP_PAIRING_INTERVAL_MS=8000
+WHATSAPP_AUTO_PAIRING_ON_BOOT=false
+WHATSAPP_RECONNECT_ON_405=false
 LOG_LEVEL=debug
 ```
 
 ## Ejecutar
 
 ```bash
-pnpm -C apps/whatsapp-adapter-service dev
+pnpm --filter whatsapp-adapter-service dev
 ```
 
 ## Endpoints
 
-- `GET /health` -> `ok`
-- `GET /ready` -> estado de polling y ultimo error
+- `GET /health`
+- `GET /ready`
+- `GET /pairing-code`
+- `POST /pairing-code/refresh`
+- `GET /qr`
+- `POST /pairing-mode/code`
 
-## Flujo
+## Vinculacion
 
-- Recibe mensajes desde Telegram usando long polling (`getUpdates`).
-- Reenvia cada texto al `orchestrator-service`.
-- Responde en Telegram con el texto retornado por el orchestrator.
-
-## Requisitos
-
-- `conversation-service` levantado (`3010`)
-- `orchestrator-service` levantado (`3022`)
-- `ms-ia-orquestacion` levantado (`3040`) si usas RAG
+- Si `WHATSAPP_USE_PAIRING_CODE=true`, genera codigo con `POST /pairing-code/refresh` e ingresalo en WhatsApp > Dispositivos vinculados > Vincular con numero de telefono.
+- Deja `WHATSAPP_AUTO_PAIRING_ON_BOOT=false` para que el codigo no rote solo mientras lo estas digitando.
+- Deja `WHATSAPP_RECONNECT_ON_405=false` para evitar bucle de reconexion cuando WhatsApp responde 405.
+- Si el codigo sigue fallando, usa QR (se imprime en terminal y tambien puedes pedirlo en `GET /qr`).
+- Si aparece 405, el servicio cambia automaticamente a modo QR para permitir vinculacion; puedes volver a modo codigo con `POST /pairing-mode/code`.
+- Si `WHATSAPP_USE_PAIRING_CODE=false`, se imprime QR en terminal.

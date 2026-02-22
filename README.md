@@ -9,7 +9,8 @@ Puerto  Servicio
 ─────── ────────────────────────────
 3000    api-gateway-bff          (Express – punto de entrada único)
 3001    ms-identidad-acceso      (Express – auth: register/login/me)
-3002    ms-atencion-whatsapp     (Express – webhook WhatsApp)
+3050    telegram-adapter-service (Express – adapter Telegram)
+3051    whatsapp-adapter-service (Express – adapter WhatsApp)
 8000    ms-ia-orquestacion       (FastAPI – IA/RAG mock)
 3004    ms-citas-agenda          (Express – CRUD citas)
 3005    ms-gestion-estudiantes   (Express – CRUD estudiantes)
@@ -141,7 +142,8 @@ sofia/
 ├── apps/
 │   ├── api-gateway-bff/        ← Punto de entrada, proxy + JWT + RBAC
 │   ├── ms-identidad-acceso/    ← Auth completo
-│   ├── ms-atencion-whatsapp/   ← Webhook WhatsApp
+│   ├── telegram-adapter-service/ ← Adapter Telegram
+│   ├── whatsapp-adapter-service/ ← Adapter WhatsApp
 │   ├── ms-ia-orquestacion/     ← FastAPI Python (IA/RAG)
 │   ├── ms-citas-agenda/        ← CRUD citas
 │   ├── ms-gestion-estudiantes/ ← CRUD estudiantes

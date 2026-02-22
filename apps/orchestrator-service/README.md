@@ -29,18 +29,18 @@ Flujo conversacional recomendado (stateful):
 
 ## Orden ideal del flujo end-to-end
 
-1. `whatsapp-adapter-service` recibe el mensaje del proveedor (Baileys/Builderbot).
-2. `whatsapp-adapter-service` llama a `POST /v1/orchestrator/handle-message` en `orchestrator-service`.
+1. `telegram-adapter-service` o `whatsapp-adapter-service` recibe el mensaje del proveedor.
+2. El adapter llama a `POST /v1/orchestrator/handle-message` en `orchestrator-service`.
 3. `orchestrator-service` decide el flow/step:
    - **consulta laboral/jurídica** -> llama a `POST /v1/ai/rag-answer` en `ms-ia-orquestacion`.
    - **soporte** -> sigue flujo de soporte (sin RAG).
    - **reset** -> limpia estado y vuelve al menú.
 4. `orchestrator-service` responde al adapter con `responses[]` y `correlationId` para trazabilidad.
-5. `whatsapp-adapter-service` envía al usuario el `responses[0].text`.
+5. El adapter envia al usuario el `responses[0].text`.
 
 ## Contrato recomendado (ideal)
 
-Formato recomendado para clientes (incluyendo whatsapp-adapter):
+Formato recomendado para clientes (incluyendo telegram-adapter):
 
 ```json
 {
@@ -69,7 +69,7 @@ Payload mínimo recomendado hacia orchestrator:
 ```json
 {
   "tenantId": "tenant_ai_demo",
-  "channel": "whatsapp",
+  "channel": "telegram",
   "externalUserId": "573001112233",
   "message": {
     "type": "text",
@@ -253,13 +253,13 @@ El script valida:
 - reset -> reinicia
 - matriz de variantes de texto (`root.text`, `message.message`, `message.text`, `message.body`, `message.text.body`)
 
-### G) Prueba end-to-end por WhatsApp
+### G) Prueba end-to-end por Telegram/WhatsApp
 
-1. Levanta `ms-ia-orquestacion`, `conversation-service`, `orchestrator-service` y `whatsapp-adapter-service`.
-2. Envia desde WhatsApp una consulta laboral/juridica.
+1. Levanta `ms-ia-orquestacion`, `conversation-service`, `orchestrator-service` y el adapter del canal que quieras (`telegram-adapter-service` o `whatsapp-adapter-service`).
+2. Envia desde Telegram o WhatsApp una consulta laboral/juridica.
 3. Revisa logs:
    - `orchestrator-service`: veras `correlationId`, `intent`, `ragLatencyMs`, `ragStatusCode`.
-   - `whatsapp-adapter-service`: veras `correlationId` y `orchestrationCorrelationId` para trazar el mensaje.
+   - adapter del canal: veras `correlationId` y `orchestrationCorrelationId` para trazar el mensaje.
 
 ### C) Soporte
 

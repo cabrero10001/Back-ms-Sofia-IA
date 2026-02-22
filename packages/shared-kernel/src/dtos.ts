@@ -80,15 +80,19 @@ export const UpdateEstadoCasoDto = z.object({
 });
 export type UpdateEstadoCasoDto = z.infer<typeof UpdateEstadoCasoDto>;
 
-// ─── WhatsApp webhook ──────────────────────────────
-export const WhatsAppWebhookDto = z.object({
+// ─── Telegram webhook ──────────────────────────────
+export const TelegramWebhookDto = z.object({
   telefono: z.string().min(7),
   mensaje: z.string().min(1),
   nombreContacto: z.string().optional(),
   messageId: z.string().optional(),
   timestamp: z.string().optional(),
 });
-export type WhatsAppWebhookDto = z.infer<typeof WhatsAppWebhookDto>;
+export type TelegramWebhookDto = z.infer<typeof TelegramWebhookDto>;
+
+// Backward compatibility
+export const WhatsAppWebhookDto = TelegramWebhookDto;
+export type WhatsAppWebhookDto = TelegramWebhookDto;
 
 // ─── IA ────────────────────────────────────────────
 export const IaRespondDto = z.object({

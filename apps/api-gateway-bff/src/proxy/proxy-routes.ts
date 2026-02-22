@@ -53,7 +53,13 @@ proxyRouter.use(
   msProxy(env.URL_MS_IDENTIDAD, { '^/': '/auth/' }),
 );
 
-// Webhook WhatsApp → público (el proveedor no manda JWT)
+// Webhook Telegram -> publico (el proveedor no manda JWT)
+proxyRouter.use(
+  '/webhook/telegram',
+  msProxy(env.URL_MS_TELEGRAM, { '^/': '/telegram/webhook' }),
+);
+
+// Webhook WhatsApp -> publico (el proveedor no manda JWT)
 proxyRouter.use(
   '/webhook/whatsapp',
   msProxy(env.URL_MS_WHATSAPP, { '^/': '/whatsapp/webhook' }),
@@ -92,6 +98,14 @@ proxyRouter.use(
   jwtVerify,
   requireRole(Rol.ADMIN_CONSULTORIO, Rol.ESTUDIANTE),
   msProxy(env.URL_MS_DASHBOARD, { '^/': '/dashboard/' }),
+);
+
+// Telegram sesiones/mensajes (acceso desde dashboard, solo admin)
+proxyRouter.use(
+  '/api/telegram',
+  jwtVerify,
+  requireRole(Rol.ADMIN_CONSULTORIO),
+  msProxy(env.URL_MS_TELEGRAM, { '^/': '/telegram/' }),
 );
 
 // WhatsApp sesiones/mensajes (acceso desde dashboard, solo admin)

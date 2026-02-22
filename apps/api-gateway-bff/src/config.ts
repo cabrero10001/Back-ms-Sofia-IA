@@ -8,7 +8,8 @@ const EnvSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('8h'),
 
   URL_MS_IDENTIDAD: z.string().url().default('http://localhost:3001'),
-  URL_MS_WHATSAPP: z.string().url().default('http://localhost:3002'),
+  URL_MS_TELEGRAM: z.string().url().default('http://localhost:3050'),
+  URL_MS_WHATSAPP: z.string().url().default('http://localhost:3051'),
   URL_MS_CASOS: z.string().url().default('http://localhost:3003'),
   URL_MS_IA: z.string().url().default('http://localhost:8000'),
   URL_MS_CITAS: z.string().url().default('http://localhost:3004'),

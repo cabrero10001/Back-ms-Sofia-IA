@@ -88,7 +88,8 @@ const PRELIMINARY_GUIDANCE_DISCLAIMER =
 const MENU_TEXT = '¡Bienvenido/a! Soy SOF-IA 👋, tu asistente virtual del Consultorio Jurídico.\n\nPuedo orientarte de forma preliminar en temas como:\n- Laboral\n- Penal\n- Civil\n- Familia\n- Constitucional\n- Administrativos\n- Conciliación\n- Tránsito\n\nCuéntame con tranquilidad tu caso o tu duda, y te acompaño paso a paso.';
 
 function mapChannel(channel: MessageIn['channel']): ConversationChannel {
-  return channel === 'whatsapp' ? 'WHATSAPP' : 'WEBCHAT';
+  if (channel === 'telegram' || channel === 'whatsapp') return 'WHATSAPP';
+  return 'WEBCHAT';
 }
 
 function mapMessageType(type: MessageIn['message']['type']): ConversationMessageType {

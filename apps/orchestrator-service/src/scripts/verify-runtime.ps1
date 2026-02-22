@@ -1,8 +1,8 @@
 param(
   [string]$BaseUrl = "http://127.0.0.1:3022",
   [string]$TenantId = "tenant_demo_flow",
-  [string]$Channel = "whatsapp",
-  [string]$ExternalUserId = "test_user_wa_573001112233"
+  [string]$Channel = "telegram",
+  [string]$ExternalUserId = "test_user_tg_573001112233"
 )
 
 $uri = "$BaseUrl/v1/orchestrator/handle-message"

@@ -1,5 +1,5 @@
 {
-  "name": "whatsapp-adapter-service",
+  "name": "telegram-adapter-service",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -8,11 +8,8 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.16",
     "dotenv": "^16.4.7",
     "express": "^4.21.0",
-    "pino": "^8.21.0",
-    "qrcode-terminal": "^0.12.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {

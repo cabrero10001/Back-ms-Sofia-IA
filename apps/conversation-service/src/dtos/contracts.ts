@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const ContractChannelSchema = z.enum(['whatsapp', 'webchat']);
+export const ContractChannelSchema = z.enum(['whatsapp', 'telegram', 'webchat']);
 export const ContractMessageTypeSchema = z.enum(['text', 'image', 'audio', 'document', 'interactive']);
 export const ContractConversationStatusSchema = z.enum(['OPEN', 'WAITING_INPUT', 'HANDOFF', 'CLOSED']);
 

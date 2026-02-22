@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const MessageChannelSchema = z.enum(['whatsapp', 'webchat']);
+export const MessageChannelSchema = z.enum(['whatsapp', 'telegram', 'webchat']);
 export const MessageTypeSchema = z.enum(['text', 'image', 'audio', 'document', 'interactive']);
 
 export const MessageInSchema = z.object({
