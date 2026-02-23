@@ -41,7 +41,17 @@ export const PatchContextBodyDto = z.object({
   patch: z.record(z.any()),
 });
 
+export const CreateNotificationBodyDto = z.object({
+  tenantId: TenantId,
+  tipo: z.string().min(1),
+  titulo: z.string().min(1),
+  mensaje: z.string().min(1),
+  prioridad: z.enum(['low', 'medium', 'high']).default('medium'),
+  estudianteId: z.string().optional(),
+});
+
 export type UpsertContactBody = z.infer<typeof UpsertContactBodyDto>;
 export type GetOrCreateConversationBody = z.infer<typeof GetOrCreateConversationBodyDto>;
 export type CreateMessageBody = z.infer<typeof CreateMessageBodyDto>;
 export type PatchContextBody = z.infer<typeof PatchContextBodyDto>;
+export type CreateNotificationBody = z.infer<typeof CreateNotificationBodyDto>;

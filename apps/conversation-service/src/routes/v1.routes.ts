@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { conversationController } from '../controllers/conversation.controller';
 import {
   ConversationParamsDto,
+  CreateNotificationBodyDto,
   CreateMessageBodyDto,
   GetOrCreateConversationBodyDto,
   LatestContextQueryDto,
@@ -31,6 +32,12 @@ v1Router.post(
   '/messages',
   validate({ body: CreateMessageBodyDto }),
   conversationController.createMessage,
+);
+
+v1Router.post(
+  '/notifications',
+  validate({ body: CreateNotificationBodyDto }),
+  conversationController.createNotification,
 );
 
 v1Router.get(

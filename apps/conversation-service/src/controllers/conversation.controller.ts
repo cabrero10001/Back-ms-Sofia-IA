@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ok } from '@sofia/shared-kernel';
 import {
+  CreateNotificationBody,
   CreateMessageBody,
   GetOrCreateConversationBody,
   PatchContextBody,
@@ -86,6 +87,23 @@ export const conversationController = {
       );
 
       res.json(ok(result));
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async createNotification(req: Request, res: Response, next: NextFunction) {
+    try {
+      const body = req.body as CreateNotificationBody;
+      const notification = await conversationService.createNotification({
+        tipo: body.tipo,
+        titulo: body.titulo,
+        mensaje: body.mensaje,
+        prioridad: body.prioridad,
+        estudianteId: body.estudianteId,
+      });
+
+      res.json(ok(notification));
     } catch (err) {
       next(err);
     }

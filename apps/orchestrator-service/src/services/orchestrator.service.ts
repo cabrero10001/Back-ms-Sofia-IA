@@ -230,23 +230,34 @@ function isAnotherQuestionPrompt(text: string): boolean {
 
 function isPolicyAccepted(text: string): boolean {
   const normalized = normalizeForMatch(text);
+  const hasNegativeSignal = [
+    'no',
+    'no acepto',
+    'no autorizo',
+    'rechazo',
+    'negativo',
+    'prefiero no',
+    'no gracias',
+  ].some((phrase) => normalized.includes(phrase));
+
+  if (hasNegativeSignal) return false;
+
   return [
     'si',
-    'sí',
     'acepto',
-    'si acepto',
-    'sí acepto',
     'autorizo',
-    'si autorizo',
-    'sí autorizo',
     'de acuerdo',
     'ok',
     'okay',
     'claro',
+    'seguro',
     'vale',
     'listo',
     'dale',
-  ].includes(normalized);
+    'afirmativo',
+    'correcto',
+    'perfecto',
+  ].some((phrase) => normalized.includes(phrase));
 }
 
 function isPolicyRejected(text: string): boolean {
@@ -266,6 +277,15 @@ function isPolicyRejected(text: string): boolean {
 
 function isPositiveReply(text: string): boolean {
   const normalized = normalizeForMatch(text);
+  const hasNegativeSignal = [
+    'no',
+    'negativo',
+    'no gracias',
+    'para nada',
+  ].some((phrase) => normalized.includes(phrase));
+
+  if (hasNegativeSignal) return false;
+
   return [
     'si',
     's',
@@ -275,7 +295,12 @@ function isPositiveReply(text: string): boolean {
     'okay',
     'dale',
     'de una',
-  ].includes(normalized);
+    'afirmativo',
+    'correcto',
+    'perfecto',
+    'hagamoslo',
+    'hágamoslo',
+  ].some((phrase) => normalized.includes(phrase));
 }
 
 function isNegativeReply(text: string): boolean {
@@ -722,6 +747,63 @@ function buildAppointmentListText(appointments: StoredAppointment[]): string {
   });
 
   return `Estas son tus citas registradas:\n${lines.join('\n')}`;
+}
+
+async function createAdminAppointmentNotification(input: {
+  tenantId: string;
+  correlationId: string;
+  title: string;
+  message: string;
+  eventType: 'cancelacion' | 'reprogramacion';
+  priority: 'low' | 'medium' | 'high';
+}) {
+  try {
+    const authResponse = await fetch(`${env.AUTH_SERVICE_URL}/api/notificaciones/chatbot-cita-evento`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Request-Id': input.correlationId,
+      },
+      body: JSON.stringify({
+        tenantId: input.tenantId,
+        tipoEvento: input.eventType,
+        titulo: input.title,
+        mensaje: input.message,
+        prioridad: input.priority,
+      }),
+    });
+
+    if (authResponse.ok) return;
+
+    const authBody = await authResponse.text();
+    log.warn(
+      {
+        correlationId: input.correlationId,
+        tenantId: input.tenantId,
+        status: authResponse.status,
+        body: authBody,
+      },
+      'Auth-service no pudo enviar correo/notificación; usando fallback local',
+    );
+
+    await conversationClient.createNotification({
+      tenantId: input.tenantId,
+      requestId: input.correlationId,
+      tipo: 'cita',
+      titulo: input.title,
+      mensaje: input.message,
+      prioridad: input.priority,
+    });
+  } catch (error) {
+    log.warn(
+      {
+        correlationId: input.correlationId,
+        tenantId: input.tenantId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'No se pudo crear notificación de cita para admin',
+    );
+  }
 }
 
 function pickOptionNumber(text: string): number | undefined {
@@ -1368,7 +1450,13 @@ async function runStatefulFlow(input: {
       });
 
       return {
-        responseText: `Perfecto. ¿Deseas usar este número de contacto: ${inferredPhone}? Responde si o no. Si quieres cambiarlo, escribe el nuevo número.`,
+        responseText: `Perfecto. Encontré este número de contacto: ${inferredPhone}
+
+Responde con una de estas opciones:
+1) Sí, usar este número
+2) No, quiero cambiarlo
+
+También puedes escribir directamente el nuevo número (ejemplo: 3001234567).`,
         patch: { intent: 'consulta_laboral', step: 'ask_user_phone_confirm', profile: profileWithPhone },
         payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'collect_user_phone_confirm' },
       };
@@ -1446,14 +1534,14 @@ async function runStatefulFlow(input: {
         profile,
       });
       return {
-        responseText: 'Entendido. Indícame el número de contacto que deseas usar.',
+        responseText: 'Entendido. Indícame el número de contacto que deseas usar (ejemplo: 3001234567).',
         patch: { intent: 'consulta_laboral', step: 'ask_user_phone', profile },
         payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'collect_user_phone_manual' },
       };
     }
 
     return {
-      responseText: 'Responde si o no para confirmar el número, o escribe directamente el nuevo número de contacto.',
+      responseText: 'Para continuar, responde: "sí" (usar este número) o "no" (cambiarlo). También puedes escribir directamente el nuevo número (ejemplo: 3001234567).',
       patch: { intent: 'consulta_laboral', step: 'ask_user_phone_confirm', profile },
       payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'user_phone_confirm_waiting' },
     };
@@ -1699,6 +1787,29 @@ async function runStatefulFlow(input: {
   if (state.category === 'laboral' && state.stage === 'awaiting_appointment_confirm') {
     const isEditOnly = profile.appointmentEditOnly === true;
 
+    if (normalizeForMatch(input.text) === 'cancelar') {
+      const nextProfile = {
+        ...profile,
+        appointment: undefined,
+        appointmentReturnToConfirm: undefined,
+        appointmentEditOnly: undefined,
+        rescheduleCandidates: undefined,
+        rescheduleSelectedIndex: undefined,
+      };
+
+      conversationStore.set(key, {
+        stage: 'awaiting_question',
+        category: 'laboral',
+        profile: nextProfile,
+      });
+
+      return {
+        responseText: `Listo, cancelé el proceso de agendamiento. ${FOLLOWUP_HINT_TEXT}`,
+        patch: { intent: 'consulta_laboral', step: 'ask_issue', profile: nextProfile },
+        payload: { orchestrator: true, correlationId: input.correlationId, flow: 'stateful', appointmentFlow: 'cancel_process' },
+      };
+    }
+
     if (isAppointmentChangeFullNameCommand(input.text)) {
       if (isEditOnly) {
         return {
@@ -1901,6 +2012,9 @@ async function runStatefulFlow(input: {
         const selectedIndex = typeof profile.rescheduleSelectedIndex === 'number'
           ? profile.rescheduleSelectedIndex
           : -1;
+        const previous = selectedIndex >= 0 && selectedIndex < currentList.length
+          ? currentList[selectedIndex]
+          : undefined;
 
         if (selectedIndex >= 0 && selectedIndex < currentList.length) {
           currentList[selectedIndex] = {
@@ -1923,6 +2037,25 @@ async function runStatefulFlow(input: {
           stage: 'awaiting_question',
           category: 'laboral',
           profile: nextProfile,
+        });
+
+        const actorName = pickString((appointmentRecord.user as Record<string, unknown> | undefined)?.fullName)
+          ?? input.messageIn.displayName
+          ?? input.messageIn.externalUserId;
+
+        const previousLabel = previous
+          ? `${formatWeekday(previous.day)} ${formatHour(previous.hour24)} (${previous.mode})`
+          : 'sin dato previo';
+
+        const nextLabel = `${formatWeekday(day)} ${formatHour(hour24)} (${mode})`;
+
+        await createAdminAppointmentNotification({
+          tenantId: input.messageIn.tenantId,
+          correlationId: input.correlationId,
+          title: 'Cita reprogramada desde chat',
+          message: `${actorName} reprogramó su cita por chat. Antes: ${previousLabel}. Ahora: ${nextLabel}.`,
+          eventType: 'reprogramacion',
+          priority: 'medium',
         });
 
         return {
@@ -2292,6 +2425,19 @@ async function runStatefulFlow(input: {
       stage: 'awaiting_question',
       category: 'laboral',
       profile: nextProfile,
+    });
+
+    const actorName = pickString((updated.user as Record<string, unknown> | undefined)?.fullName)
+      ?? input.messageIn.displayName
+      ?? input.messageIn.externalUserId;
+
+    await createAdminAppointmentNotification({
+      tenantId: input.messageIn.tenantId,
+      correlationId: input.correlationId,
+      title: 'Cita cancelada desde chat',
+      message: `${actorName} canceló su cita por chat para ${formatWeekday(updated.day)} ${formatHour(updated.hour24)} (${updated.mode}).`,
+      eventType: 'cancelacion',
+      priority: 'high',
     });
 
     return {

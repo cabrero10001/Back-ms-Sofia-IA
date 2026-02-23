@@ -14,6 +14,7 @@ import {
   contextRepository,
   conversationRepository,
   messageRepository,
+  notificationRepository,
 } from '../repositories';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -155,5 +156,15 @@ export const conversationService = {
       version: created.version,
       data: nextData,
     };
+  },
+
+  createNotification(input: {
+    tipo: string;
+    titulo: string;
+    mensaje: string;
+    prioridad: 'low' | 'medium' | 'high';
+    estudianteId?: string;
+  }) {
+    return notificationRepository.create(input);
   },
 };

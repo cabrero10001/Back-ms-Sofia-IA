@@ -14,14 +14,16 @@
     "build": "prisma generate && tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@prisma/client": "^6.3.0"
+    "@prisma/client": "^6.3.0",
+    "bcrypt": "^6.0.0"
   },
   "devDependencies": {
-    "prisma": "^6.3.0",
-    "typescript": "^5.7.0",
-    "tsx": "^4.19.0",
+    "@types/bcrypt": "^6.0.0",
     "@types/node": "^22.0.0",
-    "dotenv": "^16.4.0"
+    "dotenv": "^16.4.0",
+    "prisma": "^6.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"

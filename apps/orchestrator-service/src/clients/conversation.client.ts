@@ -49,6 +49,17 @@ interface ContextPatchResponse {
   data: Record<string, unknown>;
 }
 
+interface NotificationResponse {
+  id: string;
+  tipo: string;
+  titulo: string;
+  mensaje: string;
+  prioridad: string;
+  leida: boolean;
+  estudianteId: string | null;
+  createdAt: string;
+}
+
 function extractData<T>(response: ApiResponse<T>): T {
   if (response.error) {
     throw new AppError(502, 'CONVERSATION_SERVICE_ERROR', response.error.message, response.error.details);
@@ -192,6 +203,34 @@ export const conversationClient = {
         },
       },
     );
+
+    return extractData(res);
+  },
+
+  async createNotification(input: {
+    tenantId: string;
+    tipo: string;
+    titulo: string;
+    mensaje: string;
+    prioridad: 'low' | 'medium' | 'high';
+    estudianteId?: string;
+    requestId?: string;
+  }): Promise<NotificationResponse> {
+    const res = await safeRequest<ApiResponse<NotificationResponse>>('/v1/notifications', {
+      method: 'POST',
+      headers: {
+        ...(input.requestId ? { 'X-Request-Id': input.requestId } : {}),
+        'X-Tenant-Id': input.tenantId,
+      },
+      body: {
+        tenantId: input.tenantId,
+        tipo: input.tipo,
+        titulo: input.titulo,
+        mensaje: input.mensaje,
+        prioridad: input.prioridad,
+        estudianteId: input.estudianteId,
+      },
+    });
 
     return extractData(res);
   },
