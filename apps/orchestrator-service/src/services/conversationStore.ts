@@ -13,7 +13,13 @@ export type FlowStage =
   | 'awaiting_appointment_mode'
   | 'awaiting_appointment_day'
   | 'awaiting_appointment_time'
-  | 'awaiting_appointment_confirm';
+  | 'awaiting_appointment_confirm'
+  | 'awaiting_appointment_reschedule_pick'
+  | 'awaiting_appointment_reschedule_field'
+  | 'awaiting_appointment_cancel_pick'
+  | 'awaiting_appointment_cancel_confirm'
+  | 'awaiting_survey_rating'
+  | 'awaiting_survey_comment';
 export type FlowCategory = 'laboral' | 'soporte';
 
 export interface ConversationState {

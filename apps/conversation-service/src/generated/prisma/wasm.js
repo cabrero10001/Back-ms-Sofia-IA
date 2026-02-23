@@ -93,6 +93,192 @@ exports.Prisma.TransactionIsolationLevel = makeStrictEnum({
   Serializable: 'Serializable'
 });
 
+exports.Prisma.UsuarioScalarFieldEnum = {
+  id: 'id',
+  nombreCompleto: 'nombreCompleto',
+  correo: 'correo',
+  telefono: 'telefono',
+  passwordHash: 'passwordHash',
+  primerIngreso: 'primerIngreso',
+  rol: 'rol',
+  estado: 'estado',
+  creadoEn: 'creadoEn',
+  actualizadoEn: 'actualizadoEn'
+};
+
+exports.Prisma.IntentoLoginScalarFieldEnum = {
+  id: 'id',
+  usuarioId: 'usuarioId',
+  correo: 'correo',
+  tipo: 'tipo',
+  exitoso: 'exitoso',
+  origen: 'origen',
+  ip: 'ip',
+  userAgent: 'userAgent',
+  motivoFallo: 'motivoFallo',
+  creadoEn: 'creadoEn'
+};
+
+exports.Prisma.SesionScalarFieldEnum = {
+  id: 'id',
+  usuarioId: 'usuarioId',
+  token: 'token',
+  ip: 'ip',
+  userAgent: 'userAgent',
+  expiresAt: 'expiresAt',
+  ultimoAcceso: 'ultimoAcceso',
+  activa: 'activa',
+  creadaEn: 'creadaEn'
+};
+
+exports.Prisma.EstudianteScalarFieldEnum = {
+  id: 'id',
+  documento: 'documento',
+  nombre: 'nombre',
+  correo: 'correo',
+  telefono: 'telefono',
+  programa: 'programa',
+  semestre: 'semestre',
+  modalidad: 'modalidad',
+  estado: 'estado',
+  estadoCuenta: 'estadoCuenta',
+  accesoCitas: 'accesoCitas',
+  acudimientos: 'acudimientos',
+  fechaInicio: 'fechaInicio',
+  creadoEn: 'creadoEn',
+  actualizadoEn: 'actualizadoEn'
+};
+
+exports.Prisma.CitaScalarFieldEnum = {
+  id: 'id',
+  estudianteId: 'estudianteId',
+  fecha: 'fecha',
+  hora: 'hora',
+  modalidad: 'modalidad',
+  motivo: 'motivo',
+  estado: 'estado',
+  usuarioNombre: 'usuarioNombre',
+  usuarioTipoDocumento: 'usuarioTipoDocumento',
+  usuarioNumeroDocumento: 'usuarioNumeroDocumento',
+  usuarioCorreo: 'usuarioCorreo',
+  usuarioTelefono: 'usuarioTelefono',
+  enlaceReunion: 'enlaceReunion',
+  conversacionId: 'conversacionId',
+  notifEnviada24h: 'notifEnviada24h',
+  notifEnviada15m: 'notifEnviada15m',
+  creadoEn: 'creadoEn',
+  actualizadoEn: 'actualizadoEn'
+};
+
+exports.Prisma.AuditoriaScalarFieldEnum = {
+  id: 'id',
+  accion: 'accion',
+  entidad: 'entidad',
+  entidadId: 'entidadId',
+  detalles: 'detalles',
+  adminId: 'adminId',
+  adminNombre: 'adminNombre',
+  ip: 'ip',
+  userAgent: 'userAgent',
+  creadoEn: 'creadoEn'
+};
+
+exports.Prisma.ConfiguracionWhatsAppScalarFieldEnum = {
+  id: 'id',
+  nombreBot: 'nombreBot',
+  phoneNumberId: 'phoneNumberId',
+  businessAccountId: 'businessAccountId',
+  webhookVerifyToken: 'webhookVerifyToken',
+  webhookUrl: 'webhookUrl',
+  tokenAcceso: 'tokenAcceso',
+  activo: 'activo',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.WebhookLogScalarFieldEnum = {
+  id: 'id',
+  tipo: 'tipo',
+  payload: 'payload',
+  processed: 'processed',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.PlantillaMensajeScalarFieldEnum = {
+  id: 'id',
+  nombre: 'nombre',
+  contenido: 'contenido',
+  tipo: 'tipo',
+  idioma: 'idioma',
+  activa: 'activa',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ConversacionScalarFieldEnum = {
+  id: 'id',
+  estudianteId: 'estudianteId',
+  temaLegal: 'temaLegal',
+  consultorio: 'consultorio',
+  estado: 'estado',
+  canal: 'canal',
+  primerMensaje: 'primerMensaje',
+  resumen: 'resumen',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.MensajeScalarFieldEnum = {
+  id: 'id',
+  conversacionId: 'conversacionId',
+  tipo: 'tipo',
+  contenido: 'contenido',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.AsesoramientoScalarFieldEnum = {
+  id: 'id',
+  conversacionId: 'conversacionId',
+  estudianteId: 'estudianteId',
+  temaLegal: 'temaLegal',
+  resumen: 'resumen',
+  duracionMinutos: 'duracionMinutos',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.EncuestaSatisfaccionScalarFieldEnum = {
+  id: 'id',
+  conversacionId: 'conversacionId',
+  estudianteId: 'estudianteId',
+  calificacion: 'calificacion',
+  comentario: 'comentario',
+  respondida: 'respondida',
+  fuente: 'fuente',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.MetricaMensualScalarFieldEnum = {
+  id: 'id',
+  anio: 'anio',
+  mes: 'mes',
+  totalConversaciones: 'totalConversaciones',
+  totalAsesoramientos: 'totalAsesoramientos',
+  totalCitas: 'totalCitas',
+  citasCompletadas: 'citasCompletadas',
+  citasCanceladas: 'citasCanceladas',
+  promedioSatisfaccion: 'promedioSatisfaccion',
+  totalEncuestas: 'totalEncuestas'
+};
+
+exports.Prisma.NotificacionScalarFieldEnum = {
+  id: 'id',
+  tipo: 'tipo',
+  titulo: 'titulo',
+  mensaje: 'mensaje',
+  prioridad: 'prioridad',
+  leida: 'leida',
+  estudianteId: 'estudianteId',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.ContactScalarFieldEnum = {
   id: 'id',
   tenantId: 'tenantId',
@@ -162,6 +348,58 @@ exports.Prisma.JsonNullValueFilter = {
   JsonNull: Prisma.JsonNull,
   AnyNull: Prisma.AnyNull
 };
+exports.Rol = exports.$Enums.Rol = {
+  ADMIN_CONSULTORIO: 'ADMIN_CONSULTORIO',
+  ESTUDIANTE: 'ESTUDIANTE',
+  USUARIO: 'USUARIO'
+};
+
+exports.EstadoUsuario = exports.$Enums.EstadoUsuario = {
+  ACTIVO: 'ACTIVO',
+  INACTIVO: 'INACTIVO',
+  SUSPENDIDO: 'SUSPENDIDO'
+};
+
+exports.TipoIntentoLogin = exports.$Enums.TipoIntentoLogin = {
+  LOGIN: 'LOGIN',
+  CAMBIO_PASSWORD: 'CAMBIO_PASSWORD'
+};
+
+exports.OrigenIntento = exports.$Enums.OrigenIntento = {
+  API_WEB: 'API_WEB',
+  API_MOVIL: 'API_MOVIL'
+};
+
+exports.Modalidad = exports.$Enums.Modalidad = {
+  PRESENCIAL: 'PRESENCIAL',
+  VIRTUAL: 'VIRTUAL'
+};
+
+exports.EstadoEstudiante = exports.$Enums.EstadoEstudiante = {
+  ACTIVO: 'ACTIVO',
+  INACTIVO: 'INACTIVO'
+};
+
+exports.EstadoCita = exports.$Enums.EstadoCita = {
+  AGENDADA: 'AGENDADA',
+  CANCELADA: 'CANCELADA',
+  COMPLETIDA: 'COMPLETIDA'
+};
+
+exports.TipoAuditoria = exports.$Enums.TipoAuditoria = {
+  CREAR: 'CREAR',
+  EDITAR: 'EDITAR',
+  ELIMINAR: 'ELIMINAR',
+  AGENDAR: 'AGENDAR',
+  CANCELAR: 'CANCELAR',
+  REPROGRAMAR: 'REPROGRAMAR',
+  IMPORTAR: 'IMPORTAR',
+  EXPORTAR: 'EXPORTAR',
+  LOGIN_EXITO: 'LOGIN_EXITO',
+  LOGIN_FALLO: 'LOGIN_FALLO',
+  CAMBIO_PASSWORD: 'CAMBIO_PASSWORD'
+};
+
 exports.Channel = exports.$Enums.Channel = {
   WHATSAPP: 'WHATSAPP',
   WEBCHAT: 'WEBCHAT'
@@ -189,6 +427,21 @@ exports.MessageType = exports.$Enums.MessageType = {
 };
 
 exports.Prisma.ModelName = {
+  Usuario: 'Usuario',
+  IntentoLogin: 'IntentoLogin',
+  Sesion: 'Sesion',
+  Estudiante: 'Estudiante',
+  Cita: 'Cita',
+  Auditoria: 'Auditoria',
+  ConfiguracionWhatsApp: 'ConfiguracionWhatsApp',
+  WebhookLog: 'WebhookLog',
+  PlantillaMensaje: 'PlantillaMensaje',
+  Conversacion: 'Conversacion',
+  Mensaje: 'Mensaje',
+  Asesoramiento: 'Asesoramiento',
+  EncuestaSatisfaccion: 'EncuestaSatisfaccion',
+  MetricaMensual: 'MetricaMensual',
+  Notificacion: 'Notificacion',
   Contact: 'Contact',
   Conversation: 'Conversation',
   Message: 'Message',
@@ -205,7 +458,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "C:\\Users\\alexi\\Documents\\ValleSoftware\\Back-ms-Sofia-IA\\apps\\conversation-service\\src\\generated\\prisma",
+      "value": "C:\\Users\\alexi\\Documents\\ValleSoftware\\SOFIA\\Back-ms-Sofia-IA\\apps\\conversation-service\\src\\generated\\prisma",
       "fromEnvVar": null
     },
     "config": {
@@ -219,7 +472,7 @@ const config = {
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "C:\\Users\\alexi\\Documents\\ValleSoftware\\Back-ms-Sofia-IA\\apps\\conversation-service\\prisma\\schema.prisma",
+    "sourceFilePath": "C:\\Users\\alexi\\Documents\\ValleSoftware\\SOFIA\\Back-ms-Sofia-IA\\apps\\conversation-service\\prisma\\schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {
@@ -233,7 +486,6 @@ const config = {
     "db"
   ],
   "activeProvider": "postgresql",
-  "postinstall": false,
   "inlineDatasources": {
     "db": {
       "url": {
@@ -242,13 +494,13 @@ const config = {
       }
     }
   },
-  "inlineSchema": "generator client {\n  provider = \"prisma-client-js\"\n  output   = \"../src/generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nmodel Contact {\n  id            String         @id @default(uuid())\n  tenantId      String\n  channel       Channel\n  externalId    String\n  displayName   String?\n  phone         String?\n  createdAt     DateTime       @default(now())\n  updatedAt     DateTime       @updatedAt\n  conversations Conversation[]\n  messages      Message[]\n\n  @@unique([tenantId, channel, externalId])\n  @@index([tenantId, channel])\n}\n\nmodel Conversation {\n  id                   String                @id @default(uuid())\n  tenantId             String\n  contactId            String\n  channel              Channel\n  status               ConversationStatus    @default(OPEN)\n  lastMessageAt        DateTime              @default(now())\n  currentFlowVersionId String?\n  createdAt            DateTime              @default(now())\n  updatedAt            DateTime              @updatedAt\n  contact              Contact               @relation(fields: [contactId], references: [id])\n  contexts             ConversationContext[]\n  messages             Message[]\n\n  @@index([tenantId, contactId, status])\n  @@index([tenantId, lastMessageAt])\n}\n\nmodel Message {\n  id                String       @id @default(uuid())\n  tenantId          String\n  conversationId    String\n  contactId         String\n  direction         Direction\n  type              MessageType\n  text              String?\n  payload           Json\n  providerMessageId String?\n  createdAt         DateTime     @default(now())\n  contact           Contact      @relation(fields: [contactId], references: [id])\n  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)\n\n  @@index([tenantId, conversationId, createdAt])\n  @@index([tenantId, providerMessageId])\n}\n\nmodel ConversationContext {\n  id             String       @id @default(uuid())\n  tenantId       String\n  conversationId String\n  version        Int\n  data           Json\n  createdAt      DateTime     @default(now())\n  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)\n\n  @@unique([tenantId, conversationId, version])\n  @@index([tenantId, conversationId])\n}\n\nenum Channel {\n  WHATSAPP\n  WEBCHAT\n}\n\nenum ConversationStatus {\n  OPEN\n  WAITING_INPUT\n  HANDOFF\n  CLOSED\n}\n\nenum Direction {\n  IN\n  OUT\n}\n\nenum MessageType {\n  TEXT\n  IMAGE\n  AUDIO\n  DOCUMENT\n  INTERACTIVE\n  SYSTEM\n}\n",
-  "inlineSchemaHash": "2ee11e0fb88d7ee0d2d7ec6e5eaadec0ca9417776d767b0633e59f0a8bf7b68a",
+  "inlineSchema": "generator client {\n  provider = \"prisma-client-js\"\n  output   = \"../src/generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nenum Rol {\n  ADMIN_CONSULTORIO\n  ESTUDIANTE\n  USUARIO\n}\n\nenum EstadoUsuario {\n  ACTIVO\n  INACTIVO\n  SUSPENDIDO\n}\n\nenum TipoIntentoLogin {\n  LOGIN\n  CAMBIO_PASSWORD\n}\n\nenum OrigenIntento {\n  API_WEB\n  API_MOVIL\n}\n\nenum Modalidad {\n  PRESENCIAL\n  VIRTUAL\n}\n\nenum EstadoEstudiante {\n  ACTIVO\n  INACTIVO\n}\n\nenum EstadoCita {\n  AGENDADA\n  CANCELADA\n  COMPLETIDA\n}\n\nenum TipoAuditoria {\n  CREAR\n  EDITAR\n  ELIMINAR\n  AGENDAR\n  CANCELAR\n  REPROGRAMAR\n  IMPORTAR\n  EXPORTAR\n  LOGIN_EXITO\n  LOGIN_FALLO\n  CAMBIO_PASSWORD\n}\n\nmodel Usuario {\n  id             String         @id @default(uuid())\n  nombreCompleto String         @map(\"nombre_completo\")\n  correo         String         @unique\n  telefono       String?        @unique\n  passwordHash   String         @map(\"password_hash\")\n  primerIngreso  Boolean        @default(true) @map(\"primer_ingreso\")\n  rol            Rol            @default(USUARIO)\n  estado         EstadoUsuario  @default(ACTIVO)\n  intentosLogin  IntentoLogin[]\n  sesiones       Sesion[]\n  creadoEn       DateTime       @default(now()) @map(\"creado_en\")\n  actualizadoEn  DateTime       @updatedAt @map(\"actualizado_en\")\n\n  @@map(\"usuarios\")\n}\n\nmodel IntentoLogin {\n  id          String           @id @default(uuid())\n  usuarioId   String?          @map(\"usuario_id\")\n  correo      String           @map(\"correo\")\n  tipo        TipoIntentoLogin @default(LOGIN)\n  exitoso     Boolean          @default(false)\n  origen      OrigenIntento    @default(API_WEB)\n  ip          String?          @map(\"ip_address\")\n  userAgent   String?          @map(\"user_agent\")\n  motivoFallo String?          @map(\"motivo_fallo\")\n  creadoEn    DateTime         @default(now()) @map(\"creado_en\")\n\n  usuario Usuario? @relation(fields: [usuarioId], references: [id])\n\n  @@index([usuarioId, creadoEn])\n  @@index([correo, exitoso, creadoEn])\n  @@map(\"intentos_login\")\n}\n\nmodel Sesion {\n  id           String   @id @default(uuid())\n  usuarioId    String   @map(\"usuario_id\")\n  token        String   @unique\n  ip           String?  @map(\"ip_address\")\n  userAgent    String?  @map(\"user_agent\")\n  expiresAt    DateTime @map(\"expires_at\")\n  ultimoAcceso DateTime @default(now()) @map(\"ultimo_acceso\")\n  activa       Boolean  @default(true)\n  creadaEn     DateTime @default(now()) @map(\"creada_en\")\n\n  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)\n\n  @@index([usuarioId, activa])\n  @@index([token])\n  @@map(\"sesiones\")\n}\n\nmodel Estudiante {\n  id             String                 @id @default(uuid())\n  documento      String                 @unique\n  nombre         String\n  correo         String?\n  telefono       String?\n  programa       String?\n  semestre       Int?\n  modalidad      Modalidad              @default(PRESENCIAL)\n  estado         EstadoEstudiante       @default(ACTIVO)\n  estadoCuenta   String                 @default(\"Activo\")\n  accesoCitas    Boolean                @default(true)\n  acudimientos   Boolean                @default(false)\n  fechaInicio    DateTime?              @map(\"fecha_inicio\")\n  citas          Cita[]\n  conversaciones Conversacion[]\n  encuestas      EncuestaSatisfaccion[]\n  asesoramiento  Asesoramiento[]\n  creadoEn       DateTime               @default(now()) @map(\"creado_en\")\n  actualizadoEn  DateTime               @updatedAt @map(\"actualizado_en\")\n\n  @@map(\"estudiantes\")\n}\n\nmodel Cita {\n  id                     String        @id @default(uuid())\n  estudianteId           String        @map(\"estudiante_id\")\n  estudiante             Estudiante    @relation(fields: [estudianteId], references: [id], onDelete: Cascade)\n  fecha                  DateTime\n  hora                   String\n  modalidad              Modalidad\n  motivo                 String?\n  estado                 EstadoCita    @default(AGENDADA)\n  usuarioNombre          String?       @map(\"usuario_nombre\")\n  usuarioTipoDocumento   String?       @map(\"usuario_tipo_documento\")\n  usuarioNumeroDocumento String?       @map(\"usuario_numero_documento\")\n  usuarioCorreo          String?       @map(\"usuario_correo\")\n  usuarioTelefono        String?       @map(\"usuario_telefono\")\n  enlaceReunion          String?       @map(\"enlace_reunion\")\n  conversacionId         String?       @map(\"conversacion_id\")\n  conversacion           Conversacion? @relation(fields: [conversacionId], references: [id], onDelete: SetNull)\n  notifEnviada24h        Boolean       @default(false) @map(\"notif_enviada_24h\")\n  notifEnviada15m        Boolean       @default(false) @map(\"notif_enviada_15m\")\n  creadoEn               DateTime      @default(now()) @map(\"creado_en\")\n  actualizadoEn          DateTime      @updatedAt @map(\"actualizado_en\")\n\n  @@map(\"citas\")\n}\n\nmodel Auditoria {\n  id          String        @id @default(uuid())\n  accion      TipoAuditoria\n  entidad     String\n  entidadId   String?       @map(\"entidad_id\")\n  detalles    String\n  adminId     String?       @map(\"admin_id\")\n  adminNombre String?       @map(\"admin_nombre\")\n  ip          String?       @map(\"ip_address\")\n  userAgent   String?       @map(\"user_agent\")\n  creadoEn    DateTime      @default(now()) @map(\"creado_en\")\n\n  @@index([entidad, creadoEn])\n  @@index([adminId, creadoEn])\n  @@map(\"auditoria\")\n}\n\nmodel ConfiguracionWhatsApp {\n  id                 String   @id @default(uuid())\n  nombreBot          String   @default(\"SOF-IA Bot\")\n  phoneNumberId      String?  @map(\"phone_number_id\")\n  businessAccountId  String?  @map(\"business_account_id\")\n  webhookVerifyToken String?  @map(\"webhook_verify_token\")\n  webhookUrl         String?  @map(\"webhook_url\")\n  tokenAcceso        String?  @map(\"token_acceso\")\n  activo             Boolean  @default(true)\n  createdAt          DateTime @default(now()) @map(\"created_at\")\n  updatedAt          DateTime @updatedAt @map(\"updated_at\")\n\n  @@map(\"configuracion_whatsapp\")\n}\n\nmodel WebhookLog {\n  id        String   @id @default(uuid())\n  tipo      String\n  payload   Json\n  processed Boolean  @default(false)\n  createdAt DateTime @default(now()) @map(\"created_at\")\n\n  @@index([tipo, createdAt])\n  @@map(\"webhook_logs\")\n}\n\nmodel PlantillaMensaje {\n  id        String   @id @default(uuid())\n  nombre    String   @unique\n  contenido String\n  tipo      String\n  idioma    String   @default(\"es\")\n  activa    Boolean  @default(true)\n  createdAt DateTime @default(now()) @map(\"created_at\")\n\n  @@map(\"plantillas_mensaje\")\n}\n\nmodel Conversacion {\n  id            String                @id @default(uuid())\n  estudianteId  String?               @map(\"estudiante_id\")\n  temaLegal     String                @map(\"tema_legal\")\n  consultorio   String?\n  estado        String                @default(\"no_leido\")\n  canal         String                @default(\"whatsapp\")\n  primerMensaje String?               @map(\"primer_mensaje\")\n  resumen       String?\n  createdAt     DateTime              @default(now()) @map(\"created_at\")\n  estudiante    Estudiante?           @relation(fields: [estudianteId], references: [id], onDelete: SetNull)\n  citas         Cita[]\n  mensajes      Mensaje[]\n  asesoramiento Asesoramiento?\n  encuesta      EncuestaSatisfaccion?\n\n  @@index([estudianteId, createdAt])\n  @@map(\"conversaciones\")\n}\n\nmodel Mensaje {\n  id             String       @id @default(uuid())\n  conversacionId String       @map(\"conversacion_id\")\n  tipo           String       @map(\"tipo\")\n  contenido      String       @map(\"contenido\")\n  createdAt      DateTime     @default(now()) @map(\"created_at\")\n  conversacion   Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)\n\n  @@index([conversacionId, createdAt])\n  @@map(\"mensajes\")\n}\n\nmodel Asesoramiento {\n  id              String       @id @default(uuid())\n  conversacionId  String       @unique @map(\"conversacion_id\")\n  estudianteId    String?      @map(\"estudiante_id\")\n  temaLegal       String       @map(\"tema_legal\")\n  resumen         String?\n  duracionMinutos Int?         @map(\"duracion_minutos\")\n  createdAt       DateTime     @default(now()) @map(\"created_at\")\n  conversacion    Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)\n  estudiante      Estudiante?  @relation(fields: [estudianteId], references: [id], onDelete: SetNull)\n\n  @@map(\"asesoramientos\")\n}\n\nmodel EncuestaSatisfaccion {\n  id             String        @id @default(uuid())\n  conversacionId String?       @unique @map(\"conversacion_id\")\n  estudianteId   String?       @map(\"estudiante_id\")\n  calificacion   Int           @map(\"calificacion\")\n  comentario     String?\n  respondida     Boolean       @default(true) @map(\"respondida\")\n  fuente         String        @default(\"whatsapp\") @map(\"fuente\")\n  createdAt      DateTime      @default(now()) @map(\"created_at\")\n  conversacion   Conversacion? @relation(fields: [conversacionId], references: [id], onDelete: Cascade)\n  estudiante     Estudiante?   @relation(fields: [estudianteId], references: [id], onDelete: SetNull)\n\n  @@index([estudianteId, createdAt])\n  @@map(\"encuestas_satisfaccion\")\n}\n\nmodel MetricaMensual {\n  id                   String @id @default(uuid())\n  anio                 Int    @map(\"anio\")\n  mes                  Int    @map(\"mes\")\n  totalConversaciones  Int    @default(0) @map(\"total_conversaciones\")\n  totalAsesoramientos  Int    @default(0) @map(\"total_asesoramientos\")\n  totalCitas           Int    @default(0) @map(\"total_citas\")\n  citasCompletadas     Int    @default(0) @map(\"citas_completadas\")\n  citasCanceladas      Int    @default(0) @map(\"citas_canceladas\")\n  promedioSatisfaccion Float  @default(0) @map(\"promedio_satisfaccion\")\n  totalEncuestas       Int    @default(0) @map(\"total_encuestas\")\n\n  @@unique([anio, mes])\n  @@map(\"metricas_mensuales\")\n}\n\nmodel Notificacion {\n  id           String   @id @default(uuid())\n  tipo         String   @map(\"tipo\")\n  titulo       String   @map(\"titulo\")\n  mensaje      String   @map(\"mensaje\")\n  prioridad    String   @default(\"medium\") @map(\"prioridad\")\n  leida        Boolean  @default(false) @map(\"leida\")\n  estudianteId String?  @map(\"estudiante_id\")\n  createdAt    DateTime @default(now()) @map(\"created_at\")\n\n  @@index([leida, createdAt])\n  @@map(\"notificaciones\")\n}\n\nmodel Contact {\n  id            String         @id @default(uuid())\n  tenantId      String\n  channel       Channel\n  externalId    String\n  displayName   String?\n  phone         String?\n  createdAt     DateTime       @default(now())\n  updatedAt     DateTime       @updatedAt\n  conversations Conversation[]\n  messages      Message[]\n\n  @@unique([tenantId, channel, externalId])\n  @@index([tenantId, channel])\n}\n\nmodel Conversation {\n  id                   String                @id @default(uuid())\n  tenantId             String\n  contactId            String\n  channel              Channel\n  status               ConversationStatus    @default(OPEN)\n  lastMessageAt        DateTime              @default(now())\n  currentFlowVersionId String?\n  createdAt            DateTime              @default(now())\n  updatedAt            DateTime              @updatedAt\n  contact              Contact               @relation(fields: [contactId], references: [id])\n  contexts             ConversationContext[]\n  messages             Message[]\n\n  @@index([tenantId, contactId, status])\n  @@index([tenantId, lastMessageAt])\n}\n\nmodel Message {\n  id                String       @id @default(uuid())\n  tenantId          String\n  conversationId    String\n  contactId         String\n  direction         Direction\n  type              MessageType\n  text              String?\n  payload           Json\n  providerMessageId String?\n  createdAt         DateTime     @default(now())\n  contact           Contact      @relation(fields: [contactId], references: [id])\n  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)\n\n  @@index([tenantId, conversationId, createdAt])\n  @@index([tenantId, providerMessageId])\n}\n\nmodel ConversationContext {\n  id             String       @id @default(uuid())\n  tenantId       String\n  conversationId String\n  version        Int\n  data           Json\n  createdAt      DateTime     @default(now())\n  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)\n\n  @@unique([tenantId, conversationId, version])\n  @@index([tenantId, conversationId])\n}\n\nenum Channel {\n  WHATSAPP\n  WEBCHAT\n}\n\nenum ConversationStatus {\n  OPEN\n  WAITING_INPUT\n  HANDOFF\n  CLOSED\n}\n\nenum Direction {\n  IN\n  OUT\n}\n\nenum MessageType {\n  TEXT\n  IMAGE\n  AUDIO\n  DOCUMENT\n  INTERACTIVE\n  SYSTEM\n}\n",
+  "inlineSchemaHash": "0d12434033027d4cc40852beee008a8b69202da65f194e0c67c179f01d26a3a5",
   "copyEngine": true
 }
 config.dirname = '/'
 
-config.runtimeDataModel = JSON.parse("{\"models\":{\"Contact\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tenantId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"channel\",\"kind\":\"enum\",\"type\":\"Channel\"},{\"name\":\"externalId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"displayName\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"phone\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"conversations\",\"kind\":\"object\",\"type\":\"Conversation\",\"relationName\":\"ContactToConversation\"},{\"name\":\"messages\",\"kind\":\"object\",\"type\":\"Message\",\"relationName\":\"ContactToMessage\"}],\"dbName\":null},\"Conversation\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tenantId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"contactId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"channel\",\"kind\":\"enum\",\"type\":\"Channel\"},{\"name\":\"status\",\"kind\":\"enum\",\"type\":\"ConversationStatus\"},{\"name\":\"lastMessageAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"currentFlowVersionId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"contact\",\"kind\":\"object\",\"type\":\"Contact\",\"relationName\":\"ContactToConversation\"},{\"name\":\"contexts\",\"kind\":\"object\",\"type\":\"ConversationContext\",\"relationName\":\"ConversationToConversationContext\"},{\"name\":\"messages\",\"kind\":\"object\",\"type\":\"Message\",\"relationName\":\"ConversationToMessage\"}],\"dbName\":null},\"Message\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tenantId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"conversationId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"contactId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"direction\",\"kind\":\"enum\",\"type\":\"Direction\"},{\"name\":\"type\",\"kind\":\"enum\",\"type\":\"MessageType\"},{\"name\":\"text\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"payload\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"providerMessageId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"contact\",\"kind\":\"object\",\"type\":\"Contact\",\"relationName\":\"ContactToMessage\"},{\"name\":\"conversation\",\"kind\":\"object\",\"type\":\"Conversation\",\"relationName\":\"ConversationToMessage\"}],\"dbName\":null},\"ConversationContext\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tenantId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"conversationId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"version\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"data\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"conversation\",\"kind\":\"object\",\"type\":\"Conversation\",\"relationName\":\"ConversationToConversationContext\"}],\"dbName\":null}},\"enums\":{},\"types\":{}}")
+config.runtimeDataModel = JSON.parse("{\"models\":{\"Usuario\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"nombreCompleto\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"nombre_completo\"},{\"name\":\"correo\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"telefono\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"passwordHash\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"password_hash\"},{\"name\":\"primerIngreso\",\"kind\":\"scalar\",\"type\":\"Boolean\",\"dbName\":\"primer_ingreso\"},{\"name\":\"rol\",\"kind\":\"enum\",\"type\":\"Rol\"},{\"name\":\"estado\",\"kind\":\"enum\",\"type\":\"EstadoUsuario\"},{\"name\":\"intentosLogin\",\"kind\":\"object\",\"type\":\"IntentoLogin\",\"relationName\":\"IntentoLoginToUsuario\"},{\"name\":\"sesiones\",\"kind\":\"object\",\"type\":\"Sesion\",\"relationName\":\"SesionToUsuario\"},{\"name\":\"creadoEn\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"creado_en\"},{\"name\":\"actualizadoEn\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"actualizado_en\"}],\"dbName\":\"usuarios\"},\"IntentoLogin\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"usuarioId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"usuario_id\"},{\"name\":\"correo\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"correo\"},{\"name\":\"tipo\",\"kind\":\"enum\",\"type\":\"TipoIntentoLogin\"},{\"name\":\"exitoso\",\"kind\":\"scalar\",\"type\":\"Boolean\"},{\"name\":\"origen\",\"kind\":\"enum\",\"type\":\"OrigenIntento\"},{\"name\":\"ip\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"ip_address\"},{\"name\":\"userAgent\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"user_agent\"},{\"name\":\"motivoFallo\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"motivo_fallo\"},{\"name\":\"creadoEn\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"creado_en\"},{\"name\":\"usuario\",\"kind\":\"object\",\"type\":\"Usuario\",\"relationName\":\"IntentoLoginToUsuario\"}],\"dbName\":\"intentos_login\"},\"Sesion\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"usuarioId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"usuario_id\"},{\"name\":\"token\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"ip\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"ip_address\"},{\"name\":\"userAgent\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"user_agent\"},{\"name\":\"expiresAt\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"expires_at\"},{\"name\":\"ultimoAcceso\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"ultimo_acceso\"},{\"name\":\"activa\",\"kind\":\"scalar\",\"type\":\"Boolean\"},{\"name\":\"creadaEn\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"creada_en\"},{\"name\":\"usuario\",\"kind\":\"object\",\"type\":\"Usuario\",\"relationName\":\"SesionToUsuario\"}],\"dbName\":\"sesiones\"},\"Estudiante\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"documento\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"nombre\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"correo\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"telefono\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"programa\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"semestre\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"modalidad\",\"kind\":\"enum\",\"type\":\"Modalidad\"},{\"name\":\"estado\",\"kind\":\"enum\",\"type\":\"EstadoEstudiante\"},{\"name\":\"estadoCuenta\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"accesoCitas\",\"kind\":\"scalar\",\"type\":\"Boolean\"},{\"name\":\"acudimientos\",\"kind\":\"scalar\",\"type\":\"Boolean\"},{\"name\":\"fechaInicio\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"fecha_inicio\"},{\"name\":\"citas\",\"kind\":\"object\",\"type\":\"Cita\",\"relationName\":\"CitaToEstudiante\"},{\"name\":\"conversaciones\",\"kind\":\"object\",\"type\":\"Conversacion\",\"relationName\":\"ConversacionToEstudiante\"},{\"name\":\"encuestas\",\"kind\":\"object\",\"type\":\"EncuestaSatisfaccion\",\"relationName\":\"EncuestaSatisfaccionToEstudiante\"},{\"name\":\"asesoramiento\",\"kind\":\"object\",\"type\":\"Asesoramiento\",\"relationName\":\"AsesoramientoToEstudiante\"},{\"name\":\"creadoEn\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"creado_en\"},{\"name\":\"actualizadoEn\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"actualizado_en\"}],\"dbName\":\"estudiantes\"},\"Cita\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"estudianteId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"estudiante_id\"},{\"name\":\"estudiante\",\"kind\":\"object\",\"type\":\"Estudiante\",\"relationName\":\"CitaToEstudiante\"},{\"name\":\"fecha\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"hora\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"modalidad\",\"kind\":\"enum\",\"type\":\"Modalidad\"},{\"name\":\"motivo\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"estado\",\"kind\":\"enum\",\"type\":\"EstadoCita\"},{\"name\":\"usuarioNombre\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"usuario_nombre\"},{\"name\":\"usuarioTipoDocumento\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"usuario_tipo_documento\"},{\"name\":\"usuarioNumeroDocumento\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"usuario_numero_documento\"},{\"name\":\"usuarioCorreo\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"usuario_correo\"},{\"name\":\"usuarioTelefono\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"usuario_telefono\"},{\"name\":\"enlaceReunion\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"enlace_reunion\"},{\"name\":\"conversacionId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"conversacion_id\"},{\"name\":\"conversacion\",\"kind\":\"object\",\"type\":\"Conversacion\",\"relationName\":\"CitaToConversacion\"},{\"name\":\"notifEnviada24h\",\"kind\":\"scalar\",\"type\":\"Boolean\",\"dbName\":\"notif_enviada_24h\"},{\"name\":\"notifEnviada15m\",\"kind\":\"scalar\",\"type\":\"Boolean\",\"dbName\":\"notif_enviada_15m\"},{\"name\":\"creadoEn\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"creado_en\"},{\"name\":\"actualizadoEn\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"actualizado_en\"}],\"dbName\":\"citas\"},\"Auditoria\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"accion\",\"kind\":\"enum\",\"type\":\"TipoAuditoria\"},{\"name\":\"entidad\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"entidadId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"entidad_id\"},{\"name\":\"detalles\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"adminId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"admin_id\"},{\"name\":\"adminNombre\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"admin_nombre\"},{\"name\":\"ip\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"ip_address\"},{\"name\":\"userAgent\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"user_agent\"},{\"name\":\"creadoEn\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"creado_en\"}],\"dbName\":\"auditoria\"},\"ConfiguracionWhatsApp\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"nombreBot\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"phoneNumberId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"phone_number_id\"},{\"name\":\"businessAccountId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"business_account_id\"},{\"name\":\"webhookVerifyToken\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"webhook_verify_token\"},{\"name\":\"webhookUrl\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"webhook_url\"},{\"name\":\"tokenAcceso\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"token_acceso\"},{\"name\":\"activo\",\"kind\":\"scalar\",\"type\":\"Boolean\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"updated_at\"}],\"dbName\":\"configuracion_whatsapp\"},\"WebhookLog\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tipo\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"payload\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"processed\",\"kind\":\"scalar\",\"type\":\"Boolean\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"}],\"dbName\":\"webhook_logs\"},\"PlantillaMensaje\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"nombre\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"contenido\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tipo\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"idioma\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"activa\",\"kind\":\"scalar\",\"type\":\"Boolean\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"}],\"dbName\":\"plantillas_mensaje\"},\"Conversacion\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"estudianteId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"estudiante_id\"},{\"name\":\"temaLegal\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"tema_legal\"},{\"name\":\"consultorio\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"estado\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"canal\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"primerMensaje\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"primer_mensaje\"},{\"name\":\"resumen\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"},{\"name\":\"estudiante\",\"kind\":\"object\",\"type\":\"Estudiante\",\"relationName\":\"ConversacionToEstudiante\"},{\"name\":\"citas\",\"kind\":\"object\",\"type\":\"Cita\",\"relationName\":\"CitaToConversacion\"},{\"name\":\"mensajes\",\"kind\":\"object\",\"type\":\"Mensaje\",\"relationName\":\"ConversacionToMensaje\"},{\"name\":\"asesoramiento\",\"kind\":\"object\",\"type\":\"Asesoramiento\",\"relationName\":\"AsesoramientoToConversacion\"},{\"name\":\"encuesta\",\"kind\":\"object\",\"type\":\"EncuestaSatisfaccion\",\"relationName\":\"ConversacionToEncuestaSatisfaccion\"}],\"dbName\":\"conversaciones\"},\"Mensaje\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"conversacionId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"conversacion_id\"},{\"name\":\"tipo\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"tipo\"},{\"name\":\"contenido\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"contenido\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"},{\"name\":\"conversacion\",\"kind\":\"object\",\"type\":\"Conversacion\",\"relationName\":\"ConversacionToMensaje\"}],\"dbName\":\"mensajes\"},\"Asesoramiento\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"conversacionId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"conversacion_id\"},{\"name\":\"estudianteId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"estudiante_id\"},{\"name\":\"temaLegal\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"tema_legal\"},{\"name\":\"resumen\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"duracionMinutos\",\"kind\":\"scalar\",\"type\":\"Int\",\"dbName\":\"duracion_minutos\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"},{\"name\":\"conversacion\",\"kind\":\"object\",\"type\":\"Conversacion\",\"relationName\":\"AsesoramientoToConversacion\"},{\"name\":\"estudiante\",\"kind\":\"object\",\"type\":\"Estudiante\",\"relationName\":\"AsesoramientoToEstudiante\"}],\"dbName\":\"asesoramientos\"},\"EncuestaSatisfaccion\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"conversacionId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"conversacion_id\"},{\"name\":\"estudianteId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"estudiante_id\"},{\"name\":\"calificacion\",\"kind\":\"scalar\",\"type\":\"Int\",\"dbName\":\"calificacion\"},{\"name\":\"comentario\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"respondida\",\"kind\":\"scalar\",\"type\":\"Boolean\",\"dbName\":\"respondida\"},{\"name\":\"fuente\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"fuente\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"},{\"name\":\"conversacion\",\"kind\":\"object\",\"type\":\"Conversacion\",\"relationName\":\"ConversacionToEncuestaSatisfaccion\"},{\"name\":\"estudiante\",\"kind\":\"object\",\"type\":\"Estudiante\",\"relationName\":\"EncuestaSatisfaccionToEstudiante\"}],\"dbName\":\"encuestas_satisfaccion\"},\"MetricaMensual\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"anio\",\"kind\":\"scalar\",\"type\":\"Int\",\"dbName\":\"anio\"},{\"name\":\"mes\",\"kind\":\"scalar\",\"type\":\"Int\",\"dbName\":\"mes\"},{\"name\":\"totalConversaciones\",\"kind\":\"scalar\",\"type\":\"Int\",\"dbName\":\"total_conversaciones\"},{\"name\":\"totalAsesoramientos\",\"kind\":\"scalar\",\"type\":\"Int\",\"dbName\":\"total_asesoramientos\"},{\"name\":\"totalCitas\",\"kind\":\"scalar\",\"type\":\"Int\",\"dbName\":\"total_citas\"},{\"name\":\"citasCompletadas\",\"kind\":\"scalar\",\"type\":\"Int\",\"dbName\":\"citas_completadas\"},{\"name\":\"citasCanceladas\",\"kind\":\"scalar\",\"type\":\"Int\",\"dbName\":\"citas_canceladas\"},{\"name\":\"promedioSatisfaccion\",\"kind\":\"scalar\",\"type\":\"Float\",\"dbName\":\"promedio_satisfaccion\"},{\"name\":\"totalEncuestas\",\"kind\":\"scalar\",\"type\":\"Int\",\"dbName\":\"total_encuestas\"}],\"dbName\":\"metricas_mensuales\"},\"Notificacion\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tipo\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"tipo\"},{\"name\":\"titulo\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"titulo\"},{\"name\":\"mensaje\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"mensaje\"},{\"name\":\"prioridad\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"prioridad\"},{\"name\":\"leida\",\"kind\":\"scalar\",\"type\":\"Boolean\",\"dbName\":\"leida\"},{\"name\":\"estudianteId\",\"kind\":\"scalar\",\"type\":\"String\",\"dbName\":\"estudiante_id\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"}],\"dbName\":\"notificaciones\"},\"Contact\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tenantId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"channel\",\"kind\":\"enum\",\"type\":\"Channel\"},{\"name\":\"externalId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"displayName\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"phone\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"conversations\",\"kind\":\"object\",\"type\":\"Conversation\",\"relationName\":\"ContactToConversation\"},{\"name\":\"messages\",\"kind\":\"object\",\"type\":\"Message\",\"relationName\":\"ContactToMessage\"}],\"dbName\":null},\"Conversation\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tenantId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"contactId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"channel\",\"kind\":\"enum\",\"type\":\"Channel\"},{\"name\":\"status\",\"kind\":\"enum\",\"type\":\"ConversationStatus\"},{\"name\":\"lastMessageAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"currentFlowVersionId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"contact\",\"kind\":\"object\",\"type\":\"Contact\",\"relationName\":\"ContactToConversation\"},{\"name\":\"contexts\",\"kind\":\"object\",\"type\":\"ConversationContext\",\"relationName\":\"ConversationToConversationContext\"},{\"name\":\"messages\",\"kind\":\"object\",\"type\":\"Message\",\"relationName\":\"ConversationToMessage\"}],\"dbName\":null},\"Message\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tenantId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"conversationId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"contactId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"direction\",\"kind\":\"enum\",\"type\":\"Direction\"},{\"name\":\"type\",\"kind\":\"enum\",\"type\":\"MessageType\"},{\"name\":\"text\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"payload\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"providerMessageId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"contact\",\"kind\":\"object\",\"type\":\"Contact\",\"relationName\":\"ContactToMessage\"},{\"name\":\"conversation\",\"kind\":\"object\",\"type\":\"Conversation\",\"relationName\":\"ConversationToMessage\"}],\"dbName\":null},\"ConversationContext\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tenantId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"conversationId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"version\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"data\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"conversation\",\"kind\":\"object\",\"type\":\"Conversation\",\"relationName\":\"ConversationToConversationContext\"}],\"dbName\":null}},\"enums\":{},\"types\":{}}")
 defineDmmfProperty(exports.Prisma, config.runtimeDataModel)
 config.engineWasm = {
   getRuntime: async () => require('./query_engine_bg.js'),

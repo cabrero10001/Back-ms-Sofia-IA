@@ -121,6 +121,192 @@ exports.Prisma.TransactionIsolationLevel = makeStrictEnum({
   Serializable: 'Serializable'
 });
 
+exports.Prisma.UsuarioScalarFieldEnum = {
+  id: 'id',
+  nombreCompleto: 'nombreCompleto',
+  correo: 'correo',
+  telefono: 'telefono',
+  passwordHash: 'passwordHash',
+  primerIngreso: 'primerIngreso',
+  rol: 'rol',
+  estado: 'estado',
+  creadoEn: 'creadoEn',
+  actualizadoEn: 'actualizadoEn'
+};
+
+exports.Prisma.IntentoLoginScalarFieldEnum = {
+  id: 'id',
+  usuarioId: 'usuarioId',
+  correo: 'correo',
+  tipo: 'tipo',
+  exitoso: 'exitoso',
+  origen: 'origen',
+  ip: 'ip',
+  userAgent: 'userAgent',
+  motivoFallo: 'motivoFallo',
+  creadoEn: 'creadoEn'
+};
+
+exports.Prisma.SesionScalarFieldEnum = {
+  id: 'id',
+  usuarioId: 'usuarioId',
+  token: 'token',
+  ip: 'ip',
+  userAgent: 'userAgent',
+  expiresAt: 'expiresAt',
+  ultimoAcceso: 'ultimoAcceso',
+  activa: 'activa',
+  creadaEn: 'creadaEn'
+};
+
+exports.Prisma.EstudianteScalarFieldEnum = {
+  id: 'id',
+  documento: 'documento',
+  nombre: 'nombre',
+  correo: 'correo',
+  telefono: 'telefono',
+  programa: 'programa',
+  semestre: 'semestre',
+  modalidad: 'modalidad',
+  estado: 'estado',
+  estadoCuenta: 'estadoCuenta',
+  accesoCitas: 'accesoCitas',
+  acudimientos: 'acudimientos',
+  fechaInicio: 'fechaInicio',
+  creadoEn: 'creadoEn',
+  actualizadoEn: 'actualizadoEn'
+};
+
+exports.Prisma.CitaScalarFieldEnum = {
+  id: 'id',
+  estudianteId: 'estudianteId',
+  fecha: 'fecha',
+  hora: 'hora',
+  modalidad: 'modalidad',
+  motivo: 'motivo',
+  estado: 'estado',
+  usuarioNombre: 'usuarioNombre',
+  usuarioTipoDocumento: 'usuarioTipoDocumento',
+  usuarioNumeroDocumento: 'usuarioNumeroDocumento',
+  usuarioCorreo: 'usuarioCorreo',
+  usuarioTelefono: 'usuarioTelefono',
+  enlaceReunion: 'enlaceReunion',
+  conversacionId: 'conversacionId',
+  notifEnviada24h: 'notifEnviada24h',
+  notifEnviada15m: 'notifEnviada15m',
+  creadoEn: 'creadoEn',
+  actualizadoEn: 'actualizadoEn'
+};
+
+exports.Prisma.AuditoriaScalarFieldEnum = {
+  id: 'id',
+  accion: 'accion',
+  entidad: 'entidad',
+  entidadId: 'entidadId',
+  detalles: 'detalles',
+  adminId: 'adminId',
+  adminNombre: 'adminNombre',
+  ip: 'ip',
+  userAgent: 'userAgent',
+  creadoEn: 'creadoEn'
+};
+
+exports.Prisma.ConfiguracionWhatsAppScalarFieldEnum = {
+  id: 'id',
+  nombreBot: 'nombreBot',
+  phoneNumberId: 'phoneNumberId',
+  businessAccountId: 'businessAccountId',
+  webhookVerifyToken: 'webhookVerifyToken',
+  webhookUrl: 'webhookUrl',
+  tokenAcceso: 'tokenAcceso',
+  activo: 'activo',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.WebhookLogScalarFieldEnum = {
+  id: 'id',
+  tipo: 'tipo',
+  payload: 'payload',
+  processed: 'processed',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.PlantillaMensajeScalarFieldEnum = {
+  id: 'id',
+  nombre: 'nombre',
+  contenido: 'contenido',
+  tipo: 'tipo',
+  idioma: 'idioma',
+  activa: 'activa',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ConversacionScalarFieldEnum = {
+  id: 'id',
+  estudianteId: 'estudianteId',
+  temaLegal: 'temaLegal',
+  consultorio: 'consultorio',
+  estado: 'estado',
+  canal: 'canal',
+  primerMensaje: 'primerMensaje',
+  resumen: 'resumen',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.MensajeScalarFieldEnum = {
+  id: 'id',
+  conversacionId: 'conversacionId',
+  tipo: 'tipo',
+  contenido: 'contenido',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.AsesoramientoScalarFieldEnum = {
+  id: 'id',
+  conversacionId: 'conversacionId',
+  estudianteId: 'estudianteId',
+  temaLegal: 'temaLegal',
+  resumen: 'resumen',
+  duracionMinutos: 'duracionMinutos',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.EncuestaSatisfaccionScalarFieldEnum = {
+  id: 'id',
+  conversacionId: 'conversacionId',
+  estudianteId: 'estudianteId',
+  calificacion: 'calificacion',
+  comentario: 'comentario',
+  respondida: 'respondida',
+  fuente: 'fuente',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.MetricaMensualScalarFieldEnum = {
+  id: 'id',
+  anio: 'anio',
+  mes: 'mes',
+  totalConversaciones: 'totalConversaciones',
+  totalAsesoramientos: 'totalAsesoramientos',
+  totalCitas: 'totalCitas',
+  citasCompletadas: 'citasCompletadas',
+  citasCanceladas: 'citasCanceladas',
+  promedioSatisfaccion: 'promedioSatisfaccion',
+  totalEncuestas: 'totalEncuestas'
+};
+
+exports.Prisma.NotificacionScalarFieldEnum = {
+  id: 'id',
+  tipo: 'tipo',
+  titulo: 'titulo',
+  mensaje: 'mensaje',
+  prioridad: 'prioridad',
+  leida: 'leida',
+  estudianteId: 'estudianteId',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.ContactScalarFieldEnum = {
   id: 'id',
   tenantId: 'tenantId',
@@ -190,6 +376,58 @@ exports.Prisma.JsonNullValueFilter = {
   JsonNull: Prisma.JsonNull,
   AnyNull: Prisma.AnyNull
 };
+exports.Rol = exports.$Enums.Rol = {
+  ADMIN_CONSULTORIO: 'ADMIN_CONSULTORIO',
+  ESTUDIANTE: 'ESTUDIANTE',
+  USUARIO: 'USUARIO'
+};
+
+exports.EstadoUsuario = exports.$Enums.EstadoUsuario = {
+  ACTIVO: 'ACTIVO',
+  INACTIVO: 'INACTIVO',
+  SUSPENDIDO: 'SUSPENDIDO'
+};
+
+exports.TipoIntentoLogin = exports.$Enums.TipoIntentoLogin = {
+  LOGIN: 'LOGIN',
+  CAMBIO_PASSWORD: 'CAMBIO_PASSWORD'
+};
+
+exports.OrigenIntento = exports.$Enums.OrigenIntento = {
+  API_WEB: 'API_WEB',
+  API_MOVIL: 'API_MOVIL'
+};
+
+exports.Modalidad = exports.$Enums.Modalidad = {
+  PRESENCIAL: 'PRESENCIAL',
+  VIRTUAL: 'VIRTUAL'
+};
+
+exports.EstadoEstudiante = exports.$Enums.EstadoEstudiante = {
+  ACTIVO: 'ACTIVO',
+  INACTIVO: 'INACTIVO'
+};
+
+exports.EstadoCita = exports.$Enums.EstadoCita = {
+  AGENDADA: 'AGENDADA',
+  CANCELADA: 'CANCELADA',
+  COMPLETIDA: 'COMPLETIDA'
+};
+
+exports.TipoAuditoria = exports.$Enums.TipoAuditoria = {
+  CREAR: 'CREAR',
+  EDITAR: 'EDITAR',
+  ELIMINAR: 'ELIMINAR',
+  AGENDAR: 'AGENDAR',
+  CANCELAR: 'CANCELAR',
+  REPROGRAMAR: 'REPROGRAMAR',
+  IMPORTAR: 'IMPORTAR',
+  EXPORTAR: 'EXPORTAR',
+  LOGIN_EXITO: 'LOGIN_EXITO',
+  LOGIN_FALLO: 'LOGIN_FALLO',
+  CAMBIO_PASSWORD: 'CAMBIO_PASSWORD'
+};
+
 exports.Channel = exports.$Enums.Channel = {
   WHATSAPP: 'WHATSAPP',
   WEBCHAT: 'WEBCHAT'
@@ -217,6 +455,21 @@ exports.MessageType = exports.$Enums.MessageType = {
 };
 
 exports.Prisma.ModelName = {
+  Usuario: 'Usuario',
+  IntentoLogin: 'IntentoLogin',
+  Sesion: 'Sesion',
+  Estudiante: 'Estudiante',
+  Cita: 'Cita',
+  Auditoria: 'Auditoria',
+  ConfiguracionWhatsApp: 'ConfiguracionWhatsApp',
+  WebhookLog: 'WebhookLog',
+  PlantillaMensaje: 'PlantillaMensaje',
+  Conversacion: 'Conversacion',
+  Mensaje: 'Mensaje',
+  Asesoramiento: 'Asesoramiento',
+  EncuestaSatisfaccion: 'EncuestaSatisfaccion',
+  MetricaMensual: 'MetricaMensual',
+  Notificacion: 'Notificacion',
   Contact: 'Contact',
   Conversation: 'Conversation',
   Message: 'Message',

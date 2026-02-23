@@ -8,6 +8,308 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Rol {
+  ADMIN_CONSULTORIO
+  ESTUDIANTE
+  USUARIO
+}
+
+enum EstadoUsuario {
+  ACTIVO
+  INACTIVO
+  SUSPENDIDO
+}
+
+enum TipoIntentoLogin {
+  LOGIN
+  CAMBIO_PASSWORD
+}
+
+enum OrigenIntento {
+  API_WEB
+  API_MOVIL
+}
+
+enum Modalidad {
+  PRESENCIAL
+  VIRTUAL
+}
+
+enum EstadoEstudiante {
+  ACTIVO
+  INACTIVO
+}
+
+enum EstadoCita {
+  AGENDADA
+  CANCELADA
+  COMPLETIDA
+}
+
+enum TipoAuditoria {
+  CREAR
+  EDITAR
+  ELIMINAR
+  AGENDAR
+  CANCELAR
+  REPROGRAMAR
+  IMPORTAR
+  EXPORTAR
+  LOGIN_EXITO
+  LOGIN_FALLO
+  CAMBIO_PASSWORD
+}
+
+model Usuario {
+  id             String         @id @default(uuid())
+  nombreCompleto String         @map("nombre_completo")
+  correo         String         @unique
+  telefono       String?        @unique
+  passwordHash   String         @map("password_hash")
+  primerIngreso  Boolean        @default(true) @map("primer_ingreso")
+  rol            Rol            @default(USUARIO)
+  estado         EstadoUsuario  @default(ACTIVO)
+  intentosLogin  IntentoLogin[]
+  sesiones       Sesion[]
+  creadoEn       DateTime       @default(now()) @map("creado_en")
+  actualizadoEn  DateTime       @updatedAt @map("actualizado_en")
+
+  @@map("usuarios")
+}
+
+model IntentoLogin {
+  id          String           @id @default(uuid())
+  usuarioId   String?          @map("usuario_id")
+  correo      String           @map("correo")
+  tipo        TipoIntentoLogin @default(LOGIN)
+  exitoso     Boolean          @default(false)
+  origen      OrigenIntento    @default(API_WEB)
+  ip          String?          @map("ip_address")
+  userAgent   String?          @map("user_agent")
+  motivoFallo String?          @map("motivo_fallo")
+  creadoEn    DateTime         @default(now()) @map("creado_en")
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@index([usuarioId, creadoEn])
+  @@index([correo, exitoso, creadoEn])
+  @@map("intentos_login")
+}
+
+model Sesion {
+  id           String   @id @default(uuid())
+  usuarioId    String   @map("usuario_id")
+  token        String   @unique
+  ip           String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  expiresAt    DateTime @map("expires_at")
+  ultimoAcceso DateTime @default(now()) @map("ultimo_acceso")
+  activa       Boolean  @default(true)
+  creadaEn     DateTime @default(now()) @map("creada_en")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, activa])
+  @@index([token])
+  @@map("sesiones")
+}
+
+model Estudiante {
+  id             String                 @id @default(uuid())
+  documento      String                 @unique
+  nombre         String
+  correo         String?
+  telefono       String?
+  programa       String?
+  semestre       Int?
+  modalidad      Modalidad              @default(PRESENCIAL)
+  estado         EstadoEstudiante       @default(ACTIVO)
+  estadoCuenta   String                 @default("Activo")
+  accesoCitas    Boolean                @default(true)
+  acudimientos   Boolean                @default(false)
+  fechaInicio    DateTime?              @map("fecha_inicio")
+  citas          Cita[]
+  conversaciones Conversacion[]
+  encuestas      EncuestaSatisfaccion[]
+  asesoramiento  Asesoramiento[]
+  creadoEn       DateTime               @default(now()) @map("creado_en")
+  actualizadoEn  DateTime               @updatedAt @map("actualizado_en")
+
+  @@map("estudiantes")
+}
+
+model Cita {
+  id                     String        @id @default(uuid())
+  estudianteId           String        @map("estudiante_id")
+  estudiante             Estudiante    @relation(fields: [estudianteId], references: [id], onDelete: Cascade)
+  fecha                  DateTime
+  hora                   String
+  modalidad              Modalidad
+  motivo                 String?
+  estado                 EstadoCita    @default(AGENDADA)
+  usuarioNombre          String?       @map("usuario_nombre")
+  usuarioTipoDocumento   String?       @map("usuario_tipo_documento")
+  usuarioNumeroDocumento String?       @map("usuario_numero_documento")
+  usuarioCorreo          String?       @map("usuario_correo")
+  usuarioTelefono        String?       @map("usuario_telefono")
+  enlaceReunion          String?       @map("enlace_reunion")
+  conversacionId         String?       @map("conversacion_id")
+  conversacion           Conversacion? @relation(fields: [conversacionId], references: [id], onDelete: SetNull)
+  notifEnviada24h        Boolean       @default(false) @map("notif_enviada_24h")
+  notifEnviada15m        Boolean       @default(false) @map("notif_enviada_15m")
+  creadoEn               DateTime      @default(now()) @map("creado_en")
+  actualizadoEn          DateTime      @updatedAt @map("actualizado_en")
+
+  @@map("citas")
+}
+
+model Auditoria {
+  id          String        @id @default(uuid())
+  accion      TipoAuditoria
+  entidad     String
+  entidadId   String?       @map("entidad_id")
+  detalles    String
+  adminId     String?       @map("admin_id")
+  adminNombre String?       @map("admin_nombre")
+  ip          String?       @map("ip_address")
+  userAgent   String?       @map("user_agent")
+  creadoEn    DateTime      @default(now()) @map("creado_en")
+
+  @@index([entidad, creadoEn])
+  @@index([adminId, creadoEn])
+  @@map("auditoria")
+}
+
+model ConfiguracionWhatsApp {
+  id                 String   @id @default(uuid())
+  nombreBot          String   @default("SOF-IA Bot")
+  phoneNumberId      String?  @map("phone_number_id")
+  businessAccountId  String?  @map("business_account_id")
+  webhookVerifyToken String?  @map("webhook_verify_token")
+  webhookUrl         String?  @map("webhook_url")
+  tokenAcceso        String?  @map("token_acceso")
+  activo             Boolean  @default(true)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("configuracion_whatsapp")
+}
+
+model WebhookLog {
+  id        String   @id @default(uuid())
+  tipo      String
+  payload   Json
+  processed Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tipo, createdAt])
+  @@map("webhook_logs")
+}
+
+model PlantillaMensaje {
+  id        String   @id @default(uuid())
+  nombre    String   @unique
+  contenido String
+  tipo      String
+  idioma    String   @default("es")
+  activa    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("plantillas_mensaje")
+}
+
+model Conversacion {
+  id            String                @id @default(uuid())
+  estudianteId  String?               @map("estudiante_id")
+  temaLegal     String                @map("tema_legal")
+  consultorio   String?
+  estado        String                @default("no_leido")
+  canal         String                @default("whatsapp")
+  primerMensaje String?               @map("primer_mensaje")
+  resumen       String?
+  createdAt     DateTime              @default(now()) @map("created_at")
+  estudiante    Estudiante?           @relation(fields: [estudianteId], references: [id], onDelete: SetNull)
+  citas         Cita[]
+  mensajes      Mensaje[]
+  asesoramiento Asesoramiento?
+  encuesta      EncuestaSatisfaccion?
+
+  @@index([estudianteId, createdAt])
+  @@map("conversaciones")
+}
+
+model Mensaje {
+  id             String       @id @default(uuid())
+  conversacionId String       @map("conversacion_id")
+  tipo           String       @map("tipo")
+  contenido      String       @map("contenido")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  conversacion   Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+
+  @@index([conversacionId, createdAt])
+  @@map("mensajes")
+}
+
+model Asesoramiento {
+  id              String       @id @default(uuid())
+  conversacionId  String       @unique @map("conversacion_id")
+  estudianteId    String?      @map("estudiante_id")
+  temaLegal       String       @map("tema_legal")
+  resumen         String?
+  duracionMinutos Int?         @map("duracion_minutos")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  conversacion    Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  estudiante      Estudiante?  @relation(fields: [estudianteId], references: [id], onDelete: SetNull)
+
+  @@map("asesoramientos")
+}
+
+model EncuestaSatisfaccion {
+  id             String        @id @default(uuid())
+  conversacionId String?       @unique @map("conversacion_id")
+  estudianteId   String?       @map("estudiante_id")
+  calificacion   Int           @map("calificacion")
+  comentario     String?
+  respondida     Boolean       @default(true) @map("respondida")
+  fuente         String        @default("whatsapp") @map("fuente")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  conversacion   Conversacion? @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  estudiante     Estudiante?   @relation(fields: [estudianteId], references: [id], onDelete: SetNull)
+
+  @@index([estudianteId, createdAt])
+  @@map("encuestas_satisfaccion")
+}
+
+model MetricaMensual {
+  id                   String @id @default(uuid())
+  anio                 Int    @map("anio")
+  mes                  Int    @map("mes")
+  totalConversaciones  Int    @default(0) @map("total_conversaciones")
+  totalAsesoramientos  Int    @default(0) @map("total_asesoramientos")
+  totalCitas           Int    @default(0) @map("total_citas")
+  citasCompletadas     Int    @default(0) @map("citas_completadas")
+  citasCanceladas      Int    @default(0) @map("citas_canceladas")
+  promedioSatisfaccion Float  @default(0) @map("promedio_satisfaccion")
+  totalEncuestas       Int    @default(0) @map("total_encuestas")
+
+  @@unique([anio, mes])
+  @@map("metricas_mensuales")
+}
+
+model Notificacion {
+  id           String   @id @default(uuid())
+  tipo         String   @map("tipo")
+  titulo       String   @map("titulo")
+  mensaje      String   @map("mensaje")
+  prioridad    String   @default("medium") @map("prioridad")
+  leida        Boolean  @default(false) @map("leida")
+  estudianteId String?  @map("estudiante_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([leida, createdAt])
+  @@map("notificaciones")
+}
+
 model Contact {
   id            String         @id @default(uuid())
   tenantId      String

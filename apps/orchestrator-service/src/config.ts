@@ -11,6 +11,7 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(3021),
   CONVERSATION_SERVICE_URL: z.string().url().default('http://localhost:3010'),
+  AUTH_SERVICE_URL: z.string().url().default('http://localhost:3001'),
   AI_SERVICE_URL: z.string().url().default('http://127.0.0.1:3040'),
   ORCH_FLOW_MODE: z.enum(['stateful', 'legacy']).default('stateful'),
   ORCH_CONV_TTL_MIN: z.coerce.number().int().positive().default(30),

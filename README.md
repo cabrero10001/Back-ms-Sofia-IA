@@ -1,218 +1,150 @@
-# SOFIA - Plataforma Consultorio Jurídico Universitario
+# SOFIA - Back (Monorepo)
 
-Monorepo con microservicios (Express + TypeScript), IA (FastAPI + Python), y dashboard web (React + Vite).
+Backend del proyecto SOFIA con servicios en Node/TypeScript y un servicio de IA en Python (FastAPI).
 
-## Arquitectura
+## Servicios actuales
 
-```
-Puerto  Servicio
-─────── ────────────────────────────
-3000    api-gateway-bff          (Express – punto de entrada único)
-3001    ms-identidad-acceso      (Express – auth: register/login/me)
-3050    telegram-adapter-service (Express – adapter Telegram)
-3051    whatsapp-adapter-service (Express – adapter WhatsApp)
-8000    ms-ia-orquestacion       (FastAPI – IA/RAG mock)
-3004    ms-citas-agenda          (Express – CRUD citas)
-3005    ms-gestion-estudiantes   (Express – CRUD estudiantes)
-3006    ms-dashboard             (Express – endpoints dashboard)
-3007    ms-consentimientos       (Express – consentimientos)
-3008    ms-normativa             (Express – placeholder fase 2)
-3009    ms-reportes-analitica    (Express – placeholder fase 2)
-5173    dashboard-web            (React + Vite)
-```
+| Puerto | Servicio | Stack |
+|---|---|---|
+| `3000` | `api-gateway-bff` | Express + TypeScript |
+| `3010` | `conversation-service` | Express + TypeScript + Prisma |
+| `3021` | `orchestrator-service` | Express + TypeScript |
+| `3050` | `telegram-adapter-service` | Express + TypeScript |
+| `3051` | `whatsapp-adapter-service` | Express + TypeScript + Baileys |
+| `3004` | `ms-citas-agenda` | Express + TypeScript |
+| `3040` (recomendado) | `ms-ia-orquestacion` | FastAPI + Python |
 
 ## Requisitos
 
-- **Node.js** >= 20
-- **pnpm** >= 9 (`npm i -g pnpm`)
-- **Docker** y **Docker Compose**
-- **Python** >= 3.11 (solo para ms-ia-orquestacion)
+- Node.js `>= 20`
+- pnpm `>= 9`
+- Docker + Docker Compose
+- Python `>= 3.11` (para `ms-ia-orquestacion`)
 
-## Setup rápido
+## 1) Instalacion local
+
+Desde la raiz del repo:
 
 ```bash
-# 1. Clonar e instalar dependencias Node
 pnpm install
+```
 
-# 2. Levantar Postgres
+## 2) Variables de entorno
+
+Copia los ejemplos a `.env` en los servicios que vayas a levantar.
+
+Ejemplo minimo:
+
+- `packages/prisma/.env.example` -> `packages/prisma/.env`
+- `apps/conversation-service/.env.example` -> `apps/conversation-service/.env`
+- `apps/orchestrator-service/.env.example` -> `apps/orchestrator-service/.env`
+- `apps/telegram-adapter-service/.env.example` -> `apps/telegram-adapter-service/.env`
+- `apps/whatsapp-adapter-service/.env.example` -> `apps/whatsapp-adapter-service/.env`
+- `apps/api-gateway-bff/.env.example` -> `apps/api-gateway-bff/.env`
+
+Nota: si corres IA en `3040`, valida que `AI_SERVICE_URL` y `ORCH_RAG_BASE_URL` apunten a `http://127.0.0.1:3040`.
+
+## 3) Base de datos (Postgres)
+
+Levanta Postgres:
+
+```bash
 pnpm docker:up
+```
 
-# 3. Copiar .env desde el ejemplo (raíz + cada app que lo necesite)
-cp .env.example .env
-cp packages/prisma/.env.example packages/prisma/.env
-cp apps/ms-identidad-acceso/.env.example apps/ms-identidad-acceso/.env
-cp apps/api-gateway-bff/.env.example apps/api-gateway-bff/.env
-# (repetir para los demás MS si se van a levantar)
+Aplica schema/migraciones:
 
-# 4. Generar Prisma Client y ejecutar migración inicial
+```bash
 pnpm db:generate
 pnpm db:migrate -- --name init
+```
 
-# 5. (Opcional) Sembrar datos de prueba
+Opcional seed:
+
+```bash
 pnpm db:seed
+```
 
-# 6. Compilar los paquetes compartidos
+## 4) Build de paquetes compartidos
+
+Si es primera ejecucion local, compila estos paquetes una vez:
+
+```bash
 pnpm --filter @sofia/shared-kernel run build
 pnpm --filter @sofia/config run build
 pnpm --filter @sofia/observability run build
 pnpm --filter @sofia/http-client run build
-
-# 7. Levantar los servicios core en modo dev
-pnpm dev:identidad   # terminal 1 → :3001
-pnpm dev:gateway     # terminal 2 → :3000
+pnpm --filter @sofia/prisma run build
 ```
 
-### MS IA (Python / FastAPI)
+## 5) Levantar servicios en local
+
+Abre una terminal por servicio:
+
+```bash
+pnpm --filter conversation-service dev
+pnpm --filter orchestrator-service dev
+pnpm --filter telegram-adapter-service dev
+pnpm --filter whatsapp-adapter-service dev
+pnpm --filter api-gateway-bff dev
+```
+
+### IA (FastAPI)
 
 ```bash
 cd apps/ms-ia-orquestacion
 python -m venv .venv
-# Windows:
+
+# Windows
 .venv\Scripts\activate
-# Linux/Mac:
+
+# Linux/Mac
 # source .venv/bin/activate
+
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 3040
 ```
 
-### Dashboard Web (React + Vite)
+## 6) Verificaciones rapidas
 
 ```bash
-pnpm --filter dashboard-web run dev   # → http://localhost:5173
+curl http://localhost:3000/health
+curl http://localhost:3010/health
+curl http://localhost:3021/health
+curl http://localhost:3050/health
+curl http://localhost:3051/health
+curl http://127.0.0.1:3040/health
 ```
 
-## Curls de prueba
+## WhatsApp local (vincular celular)
 
-### Health checks
+Servicio: `apps/whatsapp-adapter-service`
+
+- Si usas codigo: `POST /pairing-code/refresh`
+- Si falla por `405`, usa QR (fallback):
+  - se imprime en terminal
+  - tambien disponible en `GET /qr`
+
+Recomendado para vincular:
+
+1. Borra sesiones previas en `apps/whatsapp-adapter-service/bot_sessions`.
+2. Inicia `whatsapp-adapter-service`.
+3. Si `pairing-code` falla, escanea QR inmediatamente.
+
+## Prisma Studio
+
+Desde la raiz:
 
 ```bash
-curl http://localhost:3000/health          # Gateway
-curl http://localhost:3001/health          # Identidad
-curl http://localhost:8000/health          # IA (FastAPI)
+pnpm db:studio
 ```
 
-### Registrar usuario
+## Comandos utiles
 
-```bash
-curl -X POST http://localhost:3000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "nombreCompleto": "Juan Pérez",
-    "correo": "juan@test.com",
-    "password": "MiClave123!",
-    "rol": "USUARIO"
-  }'
-```
-
-### Login
-
-```bash
-curl -X POST http://localhost:3000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "correo": "juan@test.com",
-    "password": "MiClave123!"
-  }'
-```
-
-### Obtener perfil (con token)
-
-```bash
-TOKEN="<pegar accessToken aquí>"
-
-curl http://localhost:3000/api/auth/me \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### Login con admin del seed
-
-```bash
-curl -X POST http://localhost:3000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "correo": "admin@sofia.edu.co",
-    "password": "Admin123!"
-  }'
-```
-
-## Estructura del monorepo
-
-```
-sofia/
-├── apps/
-│   ├── api-gateway-bff/        ← Punto de entrada, proxy + JWT + RBAC
-│   ├── ms-identidad-acceso/    ← Auth completo
-│   ├── telegram-adapter-service/ ← Adapter Telegram
-│   ├── whatsapp-adapter-service/ ← Adapter WhatsApp
-│   ├── ms-ia-orquestacion/     ← FastAPI Python (IA/RAG)
-│   ├── ms-citas-agenda/        ← CRUD citas
-│   ├── ms-gestion-estudiantes/ ← CRUD estudiantes
-│   ├── ms-dashboard/           ← Endpoints para dashboard
-│   ├── ms-consentimientos/     ← Gestión consentimientos
-│   ├── ms-normativa/           ← Placeholder fase 2
-│   ├── ms-reportes-analitica/  ← Placeholder fase 2
-│   └── dashboard-web/          ← React + Vite
-├── packages/
-│   ├── shared-kernel/          ← Enums, DTOs (Zod), errores, response helpers
-│   ├── prisma/                 ← Schema centralizado, migraciones, seed
-│   ├── config/                 ← Validación de env con Zod + dotenv
-│   ├── observability/          ← Logger (pino), request-id, http-logger
-│   └── http-client/            ← Cliente HTTP inter-servicio (fetch nativo)
-├── infra/docker/
-│   └── docker-compose.yml      ← PostgreSQL
-├── docs/
-├── .env.example
-├── pnpm-workspace.yaml
-├── tsconfig.base.json
-└── package.json
-```
-
-## Patrón por microservicio Express
-
-```
-ms-*/src/
-├── config.ts                ← Env validation con Zod
-├── app.ts                   ← Express app + middlewares + routes
-├── server.ts                ← Arranque del servidor
-├── middlewares/
-│   ├── error-handler.ts     ← Manejo centralizado de errores
-│   └── validate.ts          ← Middleware Zod para body
-└── <dominio>/
-    ├── <dominio>.routes.ts      ← Definición de rutas
-    ├── <dominio>.controller.ts  ← Manejo de req/res
-    ├── <dominio>.service.ts     ← Lógica de negocio
-    └── <dominio>.repository.ts  ← Acceso a datos (Prisma)
-```
-
-### Formato de respuesta estándar
-
-```json
-{
-  "data": { ... },
-  "error": null,
-  "meta": { "total": 100, "page": 1, "limit": 20, "totalPages": 5 }
-}
-```
-
-```json
-{
-  "data": null,
-  "error": { "code": "NOT_FOUND", "message": "Recurso no encontrado" }
-}
-```
-
-## Comandos útiles
-
-| Comando | Descripción |
-|---|---|
-| `pnpm install` | Instalar todas las dependencias |
-| `pnpm docker:up` | Levantar PostgreSQL |
-| `pnpm docker:down` | Bajar PostgreSQL |
-| `pnpm db:generate` | Generar Prisma Client |
-| `pnpm db:migrate -- --name <name>` | Crear migración |
-| `pnpm db:seed` | Ejecutar seed |
-| `pnpm db:studio` | Abrir Prisma Studio |
-| `pnpm dev:identidad` | Dev ms-identidad-acceso |
-| `pnpm dev:gateway` | Dev api-gateway-bff |
-| `pnpm build` | Build de todos los packages/apps |
-| `pnpm test` | Tests de todos los packages/apps |
+- `pnpm docker:up` / `pnpm docker:down`
+- `pnpm db:generate`
+- `pnpm db:migrate -- --name <nombre>`
+- `pnpm db:seed`
+- `pnpm db:studio`
+- `pnpm build`
+- `pnpm test`
